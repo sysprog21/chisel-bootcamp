@@ -4,6 +4,9 @@ interp.repositories() ::: List(
 
 @
 
+// Chisel 3.6+ requires the compiler plugin
+import $plugin.$ivy.`edu.berkeley.cs:::chisel3-plugin:3.6.+`
+
 interp.configureCompiler(x => x.settings.source.value = scala.tools.nsc.settings.ScalaVersion("2.12.10"))
 
 // Uncomment and change to use proxy

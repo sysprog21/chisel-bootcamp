@@ -51,7 +51,9 @@ RUN \
     \rm -rf almond couriser /root/.cache/coursier 
 
 # Execute a notebook to ensure Chisel is downloaded into the image for offline work
-RUN jupyter nbconvert --to notebook --output=/tmp/0_demo --execute 0_demo.ipynb
+# Disabled: dotvisualizer has JSON4s compatibility issues with Chisel 3.6
+# Dependencies are already cached via coursier bootstrap above
+# RUN jupyter nbconvert --to notebook --output=/tmp/0_demo --execute 0_demo.ipynb
 
 # Last stage
 FROM base as final

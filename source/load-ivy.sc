@@ -19,14 +19,25 @@ import $ivy.`edu.berkeley.cs::chiseltest:0.6.+`
 import $ivy.`edu.berkeley.cs::dsptools:1.5.+`
 import $ivy.`org.scalanlp::breeze:1.0`
 import $ivy.`edu.berkeley.cs::rocket-dsptools:1.2.0`
-import $ivy.`edu.berkeley.cs::firrtl-diagrammer:1.6.+`
+
+// firrtl-diagrammer removed due to json4s compatibility issues with Chisel 3.6
+// Visualization functions below provide alternative output
 
 import $ivy.`org.scalatest::scalatest:3.2.2`
 
 // Convenience function to invoke Chisel and grab emitted Verilog.
+// Note: emitVerilog has json4s compatibility issues, using FIRRTL as fallback
 def getVerilog(dut: => chisel3.Module): String = {
   import chisel3.stage.ChiselStage
-  (new ChiselStage).emitVerilog(dut)
+  try {
+    (new ChiselStage).emitVerilog(dut)
+  } catch {
+    case e: NoSuchMethodError if e.getMessage.contains("json4s") =>
+      println("Warning: Verilog generation has json4s compatibility issues, using FIRRTL")
+      (new ChiselStage).emitChirrtl(dut)
+    case e: Exception =>
+      throw e
+  }
 }
 
 // Convenience function to invoke Chisel and grab emitted FIRRTL.
@@ -92,76 +103,143 @@ def stringifyAST(firrtlAST: firrtl.ir.Circuit): String = {
   buf.toString
 }
 
-// Returns path to module viz and hierarchy viz
-def generateVisualizations(gen: () => chisel3.RawModule): (String, String) = {
-    import dotvisualizer._
-    import dotvisualizer.transforms._
-
-    import java.io._
-    import firrtl._
-    import firrtl.annotations._
-
+// Visualization functions - graphical SVG generation using graphviz
+def visualize(gen: () => chisel3.RawModule): Unit = {
+    import chisel3._
+    import chisel3.stage.ChiselGeneratorAnnotation
+    import chisel3.stage.phases.{Elaborate, Convert}
+    import firrtl.stage.FirrtlCircuitAnnotation
+    import sys.process._
+    import java.io.{File, PrintWriter}
     import almond.interpreter.api.DisplayData
     import almond.api.helpers.Display
 
-    import chisel3._
-    import chisel3.stage._
-    import firrtl.ir.Module
-    import sys.process._
+    // Step 1: Elaborate and convert to FIRRTL
+    val elaboratePhase = new Elaborate
+    val elaborated = elaboratePhase.transform(Seq(ChiselGeneratorAnnotation(gen)))
 
-    val sourceFirrtl = scala.Console.withOut(new PrintStream(new ByteArrayOutputStream())) {
-      (new ChiselStage).emitChirrtl(gen())
+    val convertPhase = new Convert
+    val converted = convertPhase.transform(elaborated)
+
+    val firrtlCircuit = converted.collectFirst {
+      case FirrtlCircuitAnnotation(cir) => cir
+    }.get
+
+    val firrtlString = firrtlCircuit.serialize
+
+    // Parse FIRRTL to extract structure
+    val lines = firrtlString.split("\n")
+    val moduleName = lines.find(_.trim.startsWith("module ")).map(_.trim.split(" ")(1).replace(":", "")).getOrElse("Module")
+    val inputs = lines.filter(_.trim.startsWith("input ")).map(l => l.trim.split(" ")(1).split(":")(0))
+    val outputs = lines.filter(_.trim.startsWith("output ")).map(l => l.trim.split(" ")(1).split(":")(0))
+    val regs = lines.filter(_.trim.startsWith("reg ")).map(l => l.trim.split(" ")(1).split(":")(0))
+    val wires = lines.filter(_.trim.startsWith("wire ")).map(l => l.trim.split(" ")(1).split(":")(0))
+
+    // Generate GraphViz DOT
+    val dot = new StringBuilder
+    dot ++= "digraph circuit {\n"
+    dot ++= "  rankdir=LR;\n"
+    dot ++= "  node [shape=box, style=rounded];\n\n"
+
+    // Input nodes
+    dot ++= "  subgraph cluster_inputs {\n"
+    dot ++= "    label=\"Inputs\";\n"
+    dot ++= "    style=filled; color=lightblue;\n"
+    inputs.foreach(i => dot ++= s"    $i [shape=circle, fillcolor=lightgreen, style=filled];\n")
+    dot ++= "  }\n\n"
+
+    // Output nodes
+    dot ++= "  subgraph cluster_outputs {\n"
+    dot ++= "    label=\"Outputs\";\n"
+    dot ++= "    style=filled; color=lightblue;\n"
+    outputs.foreach(o => dot ++= s"    $o [shape=doublecircle, fillcolor=lightcoral, style=filled];\n")
+    dot ++= "  }\n\n"
+
+    // Register nodes
+    if (regs.nonEmpty) {
+      dot ++= "  subgraph cluster_regs {\n"
+      dot ++= "    label=\"Registers\";\n"
+      dot ++= "    style=filled; color=lightyellow;\n"
+      regs.foreach { r =>
+        dot ++= s"    $r [shape=box, fillcolor=yellow, style=filled];\n"
+      }
+      dot ++= "  }\n\n"
     }
-    val ast = Parser.parse(sourceFirrtl)
 
-    val uniqueTopName = ast.main + ast.hashCode().toHexString
-
-    val targetDir = s"diagrams/$uniqueTopName/"
-
-    val cmdRegex = "cmd[0-9]+([A-Za-z]+.*)".r
-    val readableTop = ast.main match {
-      case cmdRegex(n) => n
-      case other => other
+    // Parse connections from FIRRTL
+    lines.filter(l => l.contains("<=") && !l.trim.startsWith("reset")).foreach { line =>
+      val parts = line.trim.split("<=").map(_.trim)
+      if (parts.length == 2) {
+        val target = parts(0).split("\\.")(0).split("\\(")(0)
+        val source = parts(1).split("\\.")(0).split("\\(")(0).split(" ")(0)
+        if (!source.startsWith("UInt") && !source.contains("\"")) {
+          dot ++= s"  $source -> $target;\n"
+        }
+      }
     }
-    val newTop = readableTop
 
-    // Console hack prevents unnecessary chatter appearing in cell
-    scala.Console.withOut(new PrintStream(new ByteArrayOutputStream())) {
-      val sourceFirrtl = (new ChiselStage).emitChirrtl(gen())
+    dot ++= "}\n"
 
-    val newModules: Seq[firrtl.ir.DefModule] = ast.modules.map {
-      case m: Module if m.name == ast.main => m.copy(name = newTop)
-      case other => other
+    // Write DOT file and generate SVG
+    val dotFile = File.createTempFile("circuit", ".dot")
+    val svgFile = File.createTempFile("circuit", ".svg")
+    val pw = new PrintWriter(dotFile)
+    pw.write(dot.toString)
+    pw.close()
+
+    // Generate SVG using graphviz
+    val result = s"dot -Tsvg ${dotFile.getAbsolutePath} -o ${svgFile.getAbsolutePath}".!
+
+    if (result == 0 && svgFile.exists()) {
+      val svgContent = scala.io.Source.fromFile(svgFile).mkString
+      Display.html(svgContent)
+    } else {
+      println("=== Module FIRRTL (Intermediate Representation) ===")
+      println(firrtlString)
+      println("\nNote: Graphviz not available. Install with: apt-get install graphviz")
     }
-    val newAst = ast.copy(main = newTop, modules = newModules)
 
-    val controlAnnotations: Seq[Annotation] = Seq(
-        firrtl.stage.FirrtlSourceAnnotation(sourceFirrtl),
-        firrtl.options.TargetDirAnnotation(targetDir),
-        dotvisualizer.stage.OpenCommandAnnotation("")
-      )
-
-      (new dotvisualizer.stage.DiagrammerStage).execute(Array.empty, controlAnnotations)
-    }
-    val moduleView = s"""$targetDir/$newTop.dot.svg"""
-    val instanceView = s"""$targetDir/${newTop}_hierarchy.dot.svg"""
-
-    val svgModuleText = FileUtils.getText(moduleView)
-    val svgInstanceText = FileUtils.getText(instanceView)
-
-    val x = s"""<div width="100%" height="100%" overflow="scroll">$svgModuleText</div>"""
-    val y = s"""<div> width="100%" height="100%"  overflow="scroll">$svgInstanceText</div>"""
-
-    (x, y)
-}
-
-def visualize(gen: () => chisel3.RawModule): Unit = {
-    val (moduleView, instanceView) = generateVisualizations(gen)
-    html(moduleView)
+    // Cleanup
+    dotFile.delete()
+    svgFile.delete()
 }
 
 def visualizeHierarchy(gen: () => chisel3.RawModule): Unit = {
-    val (moduleView, instanceView) = generateVisualizations(gen)
-    html(instanceView)
+    import chisel3._
+    import chisel3.stage.ChiselGeneratorAnnotation
+    import chisel3.stage.phases.{Elaborate, Convert}
+    import chisel3.stage.ChiselCircuitAnnotation
+    import firrtl.stage.FirrtlCircuitAnnotation
+
+    println("=== Module Hierarchy ===")
+
+    // Elaborate and convert
+    val elaboratePhase = new Elaborate
+    val elaborated = elaboratePhase.transform(Seq(ChiselGeneratorAnnotation(gen)))
+
+    val convertPhase = new Convert
+    val converted = convertPhase.transform(elaborated)
+
+    val firrtlCircuit = converted.collectFirst {
+      case FirrtlCircuitAnnotation(cir) => cir
+    }.get
+
+    val firrtlString = firrtlCircuit.serialize
+
+    // Print just the module hierarchy
+    val hierarchyLines = firrtlString.split("\n").filter(line =>
+      line.trim.startsWith("module ") ||
+      line.trim.startsWith("inst ") ||
+      line.trim.matches("^\\s+inst .*")
+    )
+
+    if (hierarchyLines.nonEmpty) {
+      hierarchyLines.foreach(println)
+    } else {
+      println("(No submodule instances found)")
+    }
+
+    println("\n=== Full FIRRTL ===")
+    println(firrtlString)
 }
 

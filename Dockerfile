@@ -64,6 +64,7 @@ COPY --from=intermediate-builder /usr/local/share/jupyter/kernels/scala/ /usr/lo
 
 RUN chown -R bootcamp:bootcamp /chisel-bootcamp
 RUN chown -R bootcamp:bootcamp /jupyter
+RUN chown -R bootcamp:bootcamp /coursier_cache
 
 USER bootcamp
 WORKDIR /chisel-bootcamp

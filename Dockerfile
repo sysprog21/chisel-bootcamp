@@ -1,5 +1,5 @@
 # First stage : setup the system and environment
-FROM ubuntu:20.04 as base
+FROM ubuntu:24.04 as base
 
 RUN \
     apt-get update && \
@@ -8,15 +8,13 @@ RUN \
         curl \
         graphviz \
         openjdk-8-jre-headless \
-        python3-distutils \
         gcc \
         python3-dev \
         && \
     rm -rf /var/lib/apt/lists/*
 
-RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
-RUN python3 get-pip.py
-RUN pip3 install jupyter jupyterlab
+RUN apt-get update && apt-get install -y python3-pip && rm -rf /var/lib/apt/lists/*
+RUN pip3 install --no-cache-dir --break-system-packages jupyter jupyterlab
 
 RUN useradd -ms /bin/bash bootcamp
 

@@ -1,6 +1,4 @@
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/freechipsproject/chisel-bootcamp/master)
-
-**_For previous users of the bootcamp, we have upgraded from Scala 2.11 to Scala 2.12. If you are encountering errors, please follow the installation instructions to upgrade to 2.12._**
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/sysprog21/chisel-bootcamp/HEAD)
 
 # Chisel Bootcamp
 
@@ -42,7 +40,7 @@ Then open the provided URL (starting with http://127.0.0.1:8888) in your browser
 
 ### Alternative Options
 
-- Try it online [HERE](https://mybinder.org/v2/gh/freechipsproject/chisel-bootcamp/master)! No local installation required!
+- Try it online [HERE](https://mybinder.org/v2/gh/sysprog21/chisel-bootcamp/HEAD)! No local installation required!
 - For local installation without Docker, [look at installation instructions here](Install.md).
 
 ## Outline

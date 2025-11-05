@@ -127,13 +127,20 @@ def visualize(gen: () => chisel3.RawModule): Unit = {
 
     val firrtlString = firrtlCircuit.serialize
 
+    // Helper function to sanitize node names for DOT format
+    def sanitizeName(name: String): String = {
+      // Replace array indices with underscores and remove other invalid chars
+      name.replaceAll("\\[([0-9]+)\\]", "_$1")
+          .replaceAll("[^a-zA-Z0-9_]", "_")
+    }
+
     // Parse FIRRTL to extract structure
     val lines = firrtlString.split("\n")
     val moduleName = lines.find(_.trim.startsWith("module ")).map(_.trim.split(" ")(1).replace(":", "")).getOrElse("Module")
-    val inputs = lines.filter(_.trim.startsWith("input ")).map(l => l.trim.split(" ")(1).split(":")(0))
-    val outputs = lines.filter(_.trim.startsWith("output ")).map(l => l.trim.split(" ")(1).split(":")(0))
-    val regs = lines.filter(_.trim.startsWith("reg ")).map(l => l.trim.split(" ")(1).split(":")(0))
-    val wires = lines.filter(_.trim.startsWith("wire ")).map(l => l.trim.split(" ")(1).split(":")(0))
+    val inputs = lines.filter(_.trim.startsWith("input ")).map(l => sanitizeName(l.trim.split(" ")(1).split(":")(0)))
+    val outputs = lines.filter(_.trim.startsWith("output ")).map(l => sanitizeName(l.trim.split(" ")(1).split(":")(0)))
+    val regs = lines.filter(_.trim.startsWith("reg ")).map(l => sanitizeName(l.trim.split(" ")(1).split(":")(0)))
+    val wires = lines.filter(_.trim.startsWith("wire ")).map(l => sanitizeName(l.trim.split(" ")(1).split(":")(0)))
 
     // Generate GraphViz DOT
     val dot = new StringBuilder
@@ -170,9 +177,11 @@ def visualize(gen: () => chisel3.RawModule): Unit = {
     lines.filter(l => l.contains("<=") && !l.trim.startsWith("reset")).foreach { line =>
       val parts = line.trim.split("<=").map(_.trim)
       if (parts.length == 2) {
-        val target = parts(0).split("\\.")(0).split("\\(")(0)
-        val source = parts(1).split("\\.")(0).split("\\(")(0).split(" ")(0)
-        if (!source.startsWith("UInt") && !source.contains("\"")) {
+        val targetRaw = parts(0).split("\\.")(0).split("\\(")(0)
+        val sourceRaw = parts(1).split("\\.")(0).split("\\(")(0).split(" ")(0)
+        if (!sourceRaw.startsWith("UInt") && !sourceRaw.contains("\"") && !sourceRaw.startsWith("_")) {
+          val target = sanitizeName(targetRaw)
+          val source = sanitizeName(sourceRaw)
           dot ++= s"  $source -> $target;\n"
         }
       }

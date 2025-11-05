@@ -15,7 +15,7 @@ Make sure you have Docker [installed](https://docs.docker.com/get-docker/) on yo
 
 The `sysprog21/chisel-bootcamp` image supports both x86-64 and Arm64 architectures. It bundles:
 - Ubuntu 24.04
-- OpenJDK 8
+- [Eclipse Temurin](https://adoptium.net/temurin) 8
 - Scala 2.12.10 with Almond 0.9.1 kernel
 - Jupyter Lab
 - Graphviz for circuit visualization
@@ -115,7 +115,7 @@ These instructions cover Windows 10 and later. Running the command prompt in Adm
 
 #### Install Java
 
-Ensure Java 17 LTS or later is installed. Test by typing `java -version` in a command prompt. If not found, install from [Adoptium](https://adoptium.net/temurin/releases/).
+Ensure Java 11 or later is installed. Test by typing `java -version` in a command prompt. If not found, install from [Adoptium](https://adoptium.net/temurin/releases/).
 
 #### Install Jupyter
 Jupyter recommends using the Anaconda distribution, here is the

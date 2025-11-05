@@ -137,10 +137,53 @@ def visualize(gen: () => chisel3.RawModule): Unit = {
     // Parse FIRRTL to extract structure
     val lines = firrtlString.split("\n")
     val moduleName = lines.find(_.trim.startsWith("module ")).map(_.trim.split(" ")(1).replace(":", "")).getOrElse("Module")
-    val inputs = lines.filter(_.trim.startsWith("input ")).map(l => sanitizeName(l.trim.split(" ")(1).split(":")(0)))
-    val outputs = lines.filter(_.trim.startsWith("output ")).map(l => sanitizeName(l.trim.split(" ")(1).split(":")(0)))
-    val regs = lines.filter(_.trim.startsWith("reg ")).map(l => sanitizeName(l.trim.split(" ")(1).split(":")(0)))
-    val wires = lines.filter(_.trim.startsWith("wire ")).map(l => sanitizeName(l.trim.split(" ")(1).split(":")(0)))
+
+    // Collect all referenced nodes from connections (this includes array elements)
+    val referencedNodes = scala.collection.mutable.Set[String]()
+    lines.filter(_.contains("<=")).foreach { line =>
+      val parts = line.trim.split("<=").map(_.trim)
+      if (parts.length == 2) {
+        val targetRaw = parts(0).split("\\.")(0).split("\\(")(0).trim
+        val sourceRaw = parts(1).split("\\.")(0).split("\\(")(0).split(" ")(0).trim
+        referencedNodes += sanitizeName(targetRaw)
+        referencedNodes += sanitizeName(sourceRaw)
+      }
+    }
+
+    // Extract declared nodes (base names without array indices)
+    val inputs = lines.filter(_.trim.startsWith("input ")).map { l =>
+      val name = l.trim.split(" ")(1).split(":")(0).trim
+      sanitizeName(name)
+    }.toSet
+
+    val outputs = lines.filter(_.trim.startsWith("output ")).map { l =>
+      val name = l.trim.split(" ")(1).split(":")(0).trim
+      sanitizeName(name)
+    }.toSet
+
+    val regs = lines.filter(_.trim.startsWith("reg ")).map { l =>
+      val name = l.trim.split(" ")(1).split(":")(0).trim
+      sanitizeName(name)
+    }.toSet
+
+    val wires = lines.filter(_.trim.startsWith("wire ")).map { l =>
+      val name = l.trim.split(" ")(1).split(":")(0).trim
+      sanitizeName(name)
+    }.toSet
+
+    // Categorize all referenced nodes
+    val inputNodes = referencedNodes.filter { node =>
+      inputs.contains(node) || inputs.exists(i => node.startsWith(i + "_"))
+    }
+    val outputNodes = referencedNodes.filter { node =>
+      outputs.contains(node) || outputs.exists(o => node.startsWith(o + "_"))
+    }
+    val regNodes = referencedNodes.filter { node =>
+      regs.contains(node) || regs.exists(r => node.startsWith(r + "_"))
+    }
+    val wireNodes = referencedNodes.filter { node =>
+      wires.contains(node) || wires.exists(w => node.startsWith(w + "_"))
+    } -- inputNodes -- outputNodes -- regNodes
 
     // Generate GraphViz DOT
     val dot = new StringBuilder
@@ -149,39 +192,58 @@ def visualize(gen: () => chisel3.RawModule): Unit = {
     dot ++= "  node [shape=box, style=rounded];\n\n"
 
     // Input nodes
-    dot ++= "  subgraph cluster_inputs {\n"
-    dot ++= "    label=\"Inputs\";\n"
-    dot ++= "    style=filled; color=lightblue;\n"
-    inputs.foreach(i => dot ++= s"    $i [shape=circle, fillcolor=lightgreen, style=filled];\n")
-    dot ++= "  }\n\n"
+    if (inputNodes.nonEmpty) {
+      dot ++= "  subgraph cluster_inputs {\n"
+      dot ++= "    label=\"Inputs\";\n"
+      dot ++= "    style=filled; color=lightblue;\n"
+      inputNodes.foreach(i => dot ++= s"    $i [shape=circle, fillcolor=lightgreen, style=filled];\n")
+      dot ++= "  }\n\n"
+    }
 
     // Output nodes
-    dot ++= "  subgraph cluster_outputs {\n"
-    dot ++= "    label=\"Outputs\";\n"
-    dot ++= "    style=filled; color=lightblue;\n"
-    outputs.foreach(o => dot ++= s"    $o [shape=doublecircle, fillcolor=lightcoral, style=filled];\n")
-    dot ++= "  }\n\n"
+    if (outputNodes.nonEmpty) {
+      dot ++= "  subgraph cluster_outputs {\n"
+      dot ++= "    label=\"Outputs\";\n"
+      dot ++= "    style=filled; color=lightblue;\n"
+      outputNodes.foreach(o => dot ++= s"    $o [shape=doublecircle, fillcolor=lightcoral, style=filled];\n")
+      dot ++= "  }\n\n"
+    }
 
     // Register nodes
-    if (regs.nonEmpty) {
+    if (regNodes.nonEmpty) {
       dot ++= "  subgraph cluster_regs {\n"
       dot ++= "    label=\"Registers\";\n"
       dot ++= "    style=filled; color=lightyellow;\n"
-      regs.foreach { r =>
+      regNodes.foreach { r =>
         dot ++= s"    $r [shape=box, fillcolor=yellow, style=filled];\n"
       }
       dot ++= "  }\n\n"
+    }
+
+    // Wire nodes (internal signals)
+    if (wireNodes.nonEmpty) {
+      wireNodes.foreach { w =>
+        dot ++= s"  $w [shape=box, style=filled, fillcolor=lightgray];\n"
+      }
+      dot ++= "\n"
     }
 
     // Parse connections from FIRRTL
     lines.filter(l => l.contains("<=") && !l.trim.startsWith("reset")).foreach { line =>
       val parts = line.trim.split("<=").map(_.trim)
       if (parts.length == 2) {
-        val targetRaw = parts(0).split("\\.")(0).split("\\(")(0)
-        val sourceRaw = parts(1).split("\\.")(0).split("\\(")(0).split(" ")(0)
-        if (!sourceRaw.startsWith("UInt") && !sourceRaw.contains("\"") && !sourceRaw.startsWith("_")) {
-          val target = sanitizeName(targetRaw)
-          val source = sanitizeName(sourceRaw)
+        // Extract base name, handling array indices and field accesses
+        val targetRaw = parts(0).split("\\.")(0).split("\\(")(0).trim
+        val sourceRaw = parts(1).split("\\.")(0).split("\\(")(0).split(" ")(0).trim
+
+        // Sanitize array indices in both target and source
+        val target = sanitizeName(targetRaw)
+        val source = sanitizeName(sourceRaw)
+
+        // Skip constants, temporaries, self-loops, and invalid nodes
+        if (!sourceRaw.startsWith("UInt") && !sourceRaw.contains("\"") &&
+            !sourceRaw.startsWith("_") && source != target &&
+            referencedNodes.contains(source) && referencedNodes.contains(target)) {
           dot ++= s"  $source -> $target;\n"
         }
       }
@@ -193,11 +255,19 @@ def visualize(gen: () => chisel3.RawModule): Unit = {
     val dotFile = File.createTempFile("circuit", ".dot")
     val svgFile = File.createTempFile("circuit", ".svg")
     val pw = new PrintWriter(dotFile)
-    pw.write(dot.toString)
+    val dotContent = dot.toString
+    pw.write(dotContent)
     pw.close()
 
     // Generate SVG using graphviz
     val result = s"dot -Tsvg ${dotFile.getAbsolutePath} -o ${svgFile.getAbsolutePath}".!
+
+    if (result != 0) {
+      // Print DOT content for debugging
+      println("=== Generated DOT (debug) ===")
+      println(dotContent)
+      println("=== End DOT ===")
+    }
 
     if (result == 0 && svgFile.exists()) {
       val svgContent = scala.io.Source.fromFile(svgFile).mkString

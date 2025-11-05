@@ -78,30 +78,6 @@ If you decide to write instances instead of generators, you will see fewer advan
 But if you take the time to learn how to write generators, then the power of Chisel will become apparent and you will realize you can never go back to writing Verilog.
 Learning to write generators is difficult, but we hope this tutorial will pave the way for you to become a better hardware designer, programmer, and thinker!
 
-## FAQ
-
-### Kernel Crashes Upon Startup
-
-I get the following error upon launching a Scala notebook and Jupyter says that the kernel has crashed:
-
-```
-Exception in thread "main" java.lang.RuntimeException: java.lang.NullPointerException
-	at jupyter.kernel.server.ServerApp$.apply(ServerApp.scala:174)
-	at jupyter.scala.JupyterScalaApp.delayedEndpoint$jupyter$scala$JupyterScalaApp$1(JupyterScala.scala:93)
-	at jupyter.scala.JupyterScalaApp$delayedInit$body.apply(JupyterScala.scala:13)
-  ...
-
-Caused by: java.lang.NullPointerException
-	at ammonite.runtime.Classpath$.classpath(Classpath.scala:31)
-	at ammonite.interp.Interpreter.init(Interpreter.scala:93)
-	at ammonite.interp.Interpreter.processModule(Interpreter.scala:409)
-	at ammonite.interp.Interpreter$$anonfun$10.apply(Interpreter.scala:151)
-	at ammonite.interp.Interpreter$$anonfun$10.apply(Interpreter.scala:148)
-  ...
-```
-
-Make sure that you have **Java 8** selected for running Jupyter (see the instructions above).
-
 ## Contributors
 - Stevo Bailey ([stevo@berkeley.edu](mailto:stevo@berkeley.edu))
 - Adam Izraelevitz ([adamiz@berkeley.edu](mailto:azidar@berkeley.edu))

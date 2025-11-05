@@ -1,5 +1,5 @@
 # First stage : setup the system and environment
-FROM ubuntu:24.04 as base
+FROM eclipse-temurin:11-jre-noble as base
 
 RUN \
     apt-get update && \
@@ -7,7 +7,6 @@ RUN \
         ca-certificates-java \
         curl \
         graphviz \
-        openjdk-8-jre-headless \
         gcc \
         python3-dev \
         && \

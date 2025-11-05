@@ -1,38 +1,49 @@
 ## Local Setup Instructions
 
-If you want to run the bootcamp locally, run the following instructions below for your particular situation.
-Note that we include a custom javascript file for Jupyter, so if you already have Jupyter installed, you still need to install the custom.js file.
+If you want to run the bootcamp locally, follow the instructions below for your platform.
 
-Note: Make sure you are using **Java 8** (NOT Java 9) and have the JDK8 installed. Coursier/jupyter-scala does not appear to be compatible with Java 9 yet as of January 2018.
-
-If you do have multiple version of Java, make sure to select Java 8 (1.8) before running `jupyter notebook`:
+Note: Java 11 or later is recommended. If you have multiple Java versions installed, select the appropriate version before running `jupyter notebook`:
 
 * On Windows: https://gist.github.com/rwunsch/d157d5fe09e9f7cdc858cec58c8462d6
-* On Mac OS: https://stackoverflow.com/questions/21964709/how-to-set-or-change-the-default-java-jdk-version-on-os-x
+* On macOS: https://stackoverflow.com/questions/21964709/how-to-set-or-change-the-default-java-jdk-version-on-os-x
 
-### Local Installation using Docker - Linux/Mac/Windows
+### Local Installation using Docker - Linux/macOS/Windows
 
-Make sure you have Docker [installed](https://docs.docker.com/get-docker/) on your system.
+Make sure you have Docker [installed](https://docs.docker.com/get-docker/) on your system, or alternatively [nerdctl](https://github.com/containerd/nerdctl) for a Docker-compatible CLI.
 
-Run the following command:
+#### Prebuilt Multi-Architecture Image (Recommended)
 
+The `sysprog21/chisel-bootcamp` image supports both x86-64 and Arm64 architectures. It bundles:
+- Ubuntu 24.04
+- OpenJDK 8
+- Scala 2.12.10 with Almond 0.9.1 kernel
+- Jupyter Lab
+- Graphviz for circuit visualization
+
+Run the container:
+
+Using Docker:
+```bash
+docker run -it --rm -p 8888:8888 sysprog21/chisel-bootcamp
 ```
-docker run -it --rm -p 8888:8888 ucbbar/chisel-bootcamp
+
+Using nerdctl:
+```bash
+nerdctl run -it --rm -p 8888:8888 sysprog21/chisel-bootcamp
 ```
 
-This will download a Dokcer image for the bootcamp and run it. The output will end in the following message:
-
+The container starts Jupyter Lab (not classic Jupyter Notebook). Look for output like:
 ```
-    To access the notebook, open this file in a browser:
-        file:///home/bootcamp/.local/share/jupyter/runtime/nbserver-6-open.html
+    To access the server, open this file in a browser:
+        file:///home/bootcamp/.local/share/jupyter/runtime/jpserver-7-open.html
     Or copy and paste one of these URLs:
-        http://79b8df8411f2:8888/?token=LONG_RANDOM_TOKEN
-     or http://127.0.0.1:8888/?token=LONG_RANDOM_TOKEN
+        http://d77238b933b7:8888/lab?token=TOKEN_HERE
+        http://127.0.0.1:8888/lab?token=TOKEN_HERE
 ```
 
-Copy the last link, the one starting with https://127.0.0.1:8888 to your browser and follow the Bootcamp.
+Copy the last URL (starting with `http://127.0.0.1:8888/lab`) into your browser to access the bootcamp.
 
-### Local Installation - Mac/Linux
+### Local Installation - macOS/Linux
 
 This bootcamp uses Jupyter notebooks.
 Jupyter notebooks allow you to interactively run code in your browser.
@@ -43,9 +54,9 @@ For this bootcamp, we'll install jupyter first and then the Scala-specific jupyt
 #### Jupyter
 First install Jupyter.
 
-Dependencies: openssh-client, openjdk-8-jre, openjdk-8-jdk (-headless OK for both),  ca-certificates-java
+Dependencies: openssh-client, openjdk-11-jre, openjdk-11-jdk (-headless OK for both), ca-certificates-java
 
-First, use pip3 to install jupyter (or pip for python 2): http://jupyter.org/install.html
+Install Jupyter using pip3 (see [Jupyter installation docs](https://jupyter.org/install)):
 ```
 pip3 install --upgrade pip
 pip3 install jupyter --ignore-installed
@@ -66,19 +77,14 @@ pip3 install jupyterlab
 
 If you experience errors or issues with this section, try running `rm -rf ~/.local/share/jupyter/kernels/scala/` first.
 
-Next, download coursier and use it to install almond (see [here](https://almond.sh/docs/quick-start-install) for the source for these instructions):
-```
-curl -L -o coursier https://git.io/coursier-cli && chmod +x coursier
-SCALA_VERSION=2.12.10 ALMOND_VERSION=0.9.1
-./coursier bootstrap -r jitpack \
-    -i user -I user:sh.almond:scala-kernel-api_$SCALA_VERSION:$ALMOND_VERSION \
-    sh.almond:scala-kernel_$SCALA_VERSION:$ALMOND_VERSION \
-    --sources --default=true \
-    -o almond
-./almond --install
+Download coursier and use it to install Almond (see [Almond installation docs](https://almond.sh/docs/quick-start-install) for details):
+```bash
+curl -L -o coursier https://github.com/coursier/coursier/releases/latest/download/coursier
+chmod +x coursier
+./coursier launch --use-bootstrap almond -- --install
 ```
 
-You can delete `coursier` and `almond` files if you so desire.
+This installs Almond with compatible Scala 2.12 versions. You can delete the `coursier` file afterward if desired.
 
 #### Visualizations
 
@@ -105,22 +111,11 @@ If you installed Jupyter Lab, run `jupyter-lab` instead.
 
 ### Local Installation - Windows
 
-These notes describe, in general, the way to install the Generator Bootcamp under Windows 10.
-Many different Windows configurations may be encountered and some changes may be required.
-Please let us know of there are things out of date, or should otherwise be covered here.
+These instructions cover Windows 10 and later. Running the command prompt in Administrator Mode is recommended for installation steps.
 
->There are several times where you may want to launch a Command (shell) window.
-I have discovered that launching the command window in Administrator Mode is helpful.
-To do that from the bottom left Launcher, find or search for 'CMD' when selecting it from
-the menu, right click and choose, "Launch in Administrator Mode".
-Find more details on this [here](http://www.thewindowsclub.com/how-to-run-command-prompt-as-an-administrator)
-and other places.
-It is also best to relauch any command windows between steps in the process (e.g. after installing Java)
-so that any newly installed software will be recognized.
+#### Install Java
 
-#### Be sure Java is installed (ideally Java 8).
-If you type `java` into a command prompt and it says command not found, you need to install
-[Java](https://adoptopenjdk.net/installation.html).
+Ensure Java 17 LTS or later is installed. Test by typing `java -version` in a command prompt. If not found, install from [Adoptium](https://adoptium.net/temurin/releases/).
 
 #### Install Jupyter
 Jupyter recommends using the Anaconda distribution, here is the
@@ -132,14 +127,13 @@ Windows does not recommend this, but I do.  It will make it easier to run using 
 If you did not elect to add Jupyter to the PATH, start a prompt using the
 "Anaconda Prompt (Anaconda3)" shortcut from the Start Menu.
 
-#### Install Scala components.
+#### Install Scala components
 
-The simplest way seems to be to download Coursier from [here](https://github.com/coursier/coursier/releases/download/v2.0.0-RC6-24/coursier).
+Download the latest Coursier from [GitHub releases](https://github.com/coursier/coursier/releases/latest/download/coursier).
 
-Go to download folder, where `coursier` (file) is
-
-```
-java -noverify -jar coursier launch --fork almond:0.10.6 --scala 2.12.8 -- --install
+Navigate to your download folder and run:
+```bash
+java -jar coursier launch almond -- --install
 ```
 
 #### Visualizations
@@ -174,49 +168,4 @@ If you require a proxy, try uncommenting and changing the relevant lines at the 
 
 Good Luck!
 
-### Cadence AWS Setup
-
-If you don't know what is Cadence AWS, or don't have access to Cadence AWS, skip this section.
-
-Navigate to your working directory, which is probably your home directory.
-
-```
-cd ~
-```
-
-Then run the following commands.
-The default shell is c-shell, but if you switch to bash, source `jupyter_sh` instead of `jupyter_csh`.
-```
-source /craft/tools/jupyter/jupyter_csh
-```
-
-The default browser, Konqueror, won't work with Jupyter.
-Launch Firefox in the background and set it as your default browser when it asks.
-```
-/craft/cdns_sw_inst/firefox/45.3.0esr/firefox &
-```
-
-Clone the repo and launch Jupyter.
-If it asks for a token, copy and paste the *to login with a token* URL seen in the terminal.
-Future launches will be happy for a while.
-```
-git clone /craft/tools/chisel/generator-bootcamp.git
-cd generator-bootcamp
-jupyter notebook
-```
-
-### Cadence Chamber Setup
-
-If you don't know what the Cadence Chamber is, skip this section.
-Navigate to your work directory, likely `/projects/craft_flow/work/<username>/`.
-Then run the following commands.
-Note that `/proj/` is an alias to `/projects/`.
-If you are in bash, source `jupyter_sh` instead of `jupyter_csh`.
-
-```
-source /proj/craft_flow/tools/jupyter/jupyter_csh
-git clone /proj/craft_flow/source/chisel/generator-bootcamp
-cd generator-bootcamp
-jupyter notebook
-```
 

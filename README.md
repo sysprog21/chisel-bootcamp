@@ -24,9 +24,26 @@ It teaches you Scala along the way, and it frames the learning of Chisel on the 
 
 ## Getting Started
 
-Try it out [HERE](https://mybinder.org/v2/gh/freechipsproject/chisel-bootcamp/master)! No local installation required!
+### Quick Start with Docker
 
-If you want to try it out locally, [look at installation instructions here](Install.md).
+The fastest way to get started is using the prebuilt Docker image that supports both x86-64 and Arm64:
+
+Using Docker:
+```bash
+docker run -it --rm -p 8888:8888 sysprog21/chisel-bootcamp
+```
+
+Using nerdctl:
+```bash
+nerdctl run -it --rm -p 8888:8888 sysprog21/chisel-bootcamp
+```
+
+Then open the provided URL (starting with http://127.0.0.1:8888) in your browser.
+
+### Alternative Options
+
+- Try it online [HERE](https://mybinder.org/v2/gh/freechipsproject/chisel-bootcamp/master)! No local installation required!
+- For local installation without Docker, [look at installation instructions here](Install.md).
 
 ## Outline
 

@@ -45,7 +45,6 @@ RUN \
         bootstrap \
         -r jitpack \
         sh.almond:scala-kernel_$SCALA_VERSION:$ALMOND_VERSION \
-        --sources \
         --default=true \
         -o almond && \
     ./almond --install --global && \

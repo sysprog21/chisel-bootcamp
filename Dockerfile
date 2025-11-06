@@ -86,12 +86,17 @@ RUN \
         --default=true \
         -o almond && \
     ./almond --install --global && \
+    # Preload Chisel dependencies to avoid first-run delay before removing coursier
+    ./coursier fetch \
+        edu.berkeley.cs:chisel3_2.12:3.6.1 \
+        edu.berkeley.cs:chisel-iotesters_2.12:2.5.6 \
+        edu.berkeley.cs:chiseltest_2.12:0.6.2 \
+        edu.berkeley.cs:dsptools_2.12:1.5.6 \
+        edu.berkeley.cs:rocket-dsptools_2.12:1.2.0 \
+        org.scalanlp:breeze_2.12:1.0 \
+        org.scalatest:scalatest_2.12:3.2.2 \
+        --cache /coursier_cache && \
     rm -rf almond coursier /root/.cache/coursier
-
-# Execute a notebook to ensure Chisel is downloaded into the image for offline work
-# Disabled: dotvisualizer has JSON4s compatibility issues with Chisel 3.6
-# Dependencies are already cached via coursier bootstrap above
-# RUN jupyter nbconvert --to notebook --output=/tmp/0_demo --execute 0_demo.ipynb
 
 # Last stage
 FROM base AS final

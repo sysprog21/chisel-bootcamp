@@ -54,21 +54,22 @@ ARG TARGETARCH
 
 RUN mkdir /coursier_cache
 
-# Install glibc and dependencies for coursier binaries (both amd64 and arm64 require glibc)
+# Install glibc for ARM64 coursier binary (x86-64 uses static musl build)
 RUN \
-    apk add --no-cache curl wget gcompat libstdc++ zlib && \
-    wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub && \
-    wget -q https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.35-r1/glibc-2.35-r1.apk && \
-    apk --no-cache --force-overwrite add glibc-2.35-r1.apk && \
-    rm glibc-2.35-r1.apk && \
     if [ "$TARGETARCH" = "arm64" ]; then \
+        apk add --no-cache wget gcompat libstdc++ && \
+        wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub && \
+        wget -q https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.35-r1/glibc-2.35-r1.apk && \
+        apk --no-cache --force-overwrite add glibc-2.35-r1.apk && \
+        rm glibc-2.35-r1.apk && \
         ln -s /lib/ld-musl-aarch64.so.1 /lib/ld-linux-aarch64.so.1 2>/dev/null || true; \
     fi
 
 RUN \
+    apk add --no-cache curl && \
     case "$TARGETARCH" in \
         amd64|"") \
-            CS_URL="https://github.com/coursier/coursier/releases/download/v${COURSIER_VERSION}/cs-x86_64-pc-linux.gz" ;; \
+            CS_URL="https://github.com/coursier/coursier/releases/download/v${COURSIER_VERSION}/cs-x86_64-pc-linux-static.gz" ;; \
         arm64) \
             CS_URL="https://github.com/VirtusLab/coursier-m1/releases/download/v${COURSIER_VERSION}/cs-aarch64-pc-linux.gz" ;; \
         *) \

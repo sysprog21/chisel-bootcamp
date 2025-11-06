@@ -90,7 +90,7 @@ RUN \
     ./coursier fetch \
         edu.berkeley.cs:chisel3_2.12:3.6.1 \
         edu.berkeley.cs:chisel-iotesters_2.12:2.5.6 \
-        edu.berkeley.cs:chiseltest_2.12:0.6.2 \
+        edu.berkeley.cs:chiseltest_2.12:0.6.1 \
         edu.berkeley.cs:dsptools_2.12:1.5.6 \
         edu.berkeley.cs:rocket-dsptools_2.12:1.2.0 \
         org.scalanlp:breeze_2.12:1.0 \

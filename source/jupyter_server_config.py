@@ -31,3 +31,11 @@ class SuppressAuthWarning(logging.Filter):
 # Apply the filter to ServerApp logger
 server_logger = logging.getLogger('ServerApp')
 server_logger.addFilter(SuppressAuthWarning())
+
+# Hide system and build files from file browser
+# Students only need to see notebook files (*.ipynb)
+c.ContentsManager.hide_globs = [
+    'almond', 'coursier', 'Dockerfile', 'LICENSE',
+    'Install.md', 'README.md', 'runtest.py',
+    'binder', 'images', 'source'
+]

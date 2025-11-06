@@ -44,8 +44,10 @@ COPY . /chisel-bootcamp/
 WORKDIR /chisel-bootcamp
 
 RUN mkdir -p $JUPYTER_CONFIG_DIR/custom && \
+    mkdir -p $JUPYTER_CONFIG_DIR/lab/user-settings/@jupyterlab/apputils-extension && \
     cp source/custom.js $JUPYTER_CONFIG_DIR/custom/ && \
-    cp source/jupyter_server_config.py $JUPYTER_CONFIG_DIR/
+    cp source/jupyter_server_config.py $JUPYTER_CONFIG_DIR/ && \
+    cp source/overrides.json $JUPYTER_CONFIG_DIR/lab/user-settings/@jupyterlab/apputils-extension/notification.jupyterlab-settings
 
 # Second stage - download Scala requirements and the Scala kernel
 FROM base AS intermediate-builder

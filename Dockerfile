@@ -36,7 +36,6 @@ RUN adduser -D -s /bin/bash bootcamp
 ENV SCALA_VERSION=2.12.10
 ENV ALMOND_VERSION=0.9.1
 ENV COURSIER_VERSION=2.1.24
-ENV COURSIER_CACHE=/coursier_cache
 ENV JUPYTER_CONFIG_DIR=/jupyter/config
 ENV JUPYTER_DATA_DIR=/jupyter/data
 
@@ -86,7 +85,12 @@ RUN \
         --default=true \
         -o almond && \
     ./almond --install --global && \
-    # Preload Chisel dependencies to avoid first-run delay before removing coursier
+    # Preload Chisel dependencies - coursier fetch downloads to its default cache
+    # which gets picked up by Ammonite at runtime
+    ./coursier fetch \
+        --intransitive \
+        edu.berkeley.cs:chisel3-plugin_2.12.10:3.6.1 \
+        && \
     ./coursier fetch \
         edu.berkeley.cs:chisel3_2.12:3.6.1 \
         edu.berkeley.cs:chisel-iotesters_2.12:2.5.6 \
@@ -95,20 +99,23 @@ RUN \
         edu.berkeley.cs:rocket-dsptools_2.12:1.2.0 \
         org.scalanlp:breeze_2.12:1.0 \
         org.scalatest:scalatest_2.12:3.2.2 \
-        --cache /coursier_cache && \
-    rm -rf almond coursier /root/.cache/coursier
+        && \
+    rm -rf almond coursier
 
 # Last stage
 FROM base AS final
+
+# Set COURSIER_CACHE environment variable so Ammonite uses our preloaded cache
+ENV COURSIER_CACHE=/coursier_cache
 
 # copy the Scala requirements and kernel into the image
 COPY --from=intermediate-builder --chown=bootcamp:bootcamp /coursier_cache/ /coursier_cache/
 COPY --from=intermediate-builder --chown=bootcamp:bootcamp /usr/local/share/jupyter/kernels/scala/ /usr/local/share/jupyter/kernels/scala/
 
-RUN chown -R bootcamp:bootcamp /chisel-bootcamp /jupyter
+RUN chown -R bootcamp:bootcamp /chisel-bootcamp /jupyter /coursier_cache
 
 USER bootcamp
 WORKDIR /chisel-bootcamp
 
 EXPOSE 8888
-CMD jupyter lab --no-browser --ip 0.0.0.0 --port 8888
+CMD ["jupyter", "lab", "--no-browser", "--ip", "0.0.0.0", "--port", "8888"]

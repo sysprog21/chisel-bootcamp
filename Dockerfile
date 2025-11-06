@@ -1,44 +1,80 @@
 # First stage : setup the system and environment
-FROM eclipse-temurin:11-jre-noble as base
+FROM alpine:3.22 AS base
 
+# Install OpenJDK 11 and runtime dependencies
 RUN \
-    apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        ca-certificates-java \
-        curl \
+    apk add --no-cache \
+        openjdk11-jre-headless \
         graphviz \
+        python3 \
+        py3-pip \
+        bash \
+        libstdc++ \
+        && \
+    apk add --no-cache --virtual .build-deps \
         gcc \
+        g++ \
+        musl-dev \
+        linux-headers \
         python3-dev \
         && \
-    rm -rf /var/lib/apt/lists/*
+    pip3 install --no-cache-dir --break-system-packages jupyter jupyterlab && \
+    find /usr/lib/python3.12 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/lib/python3.12 -type f -name '*.pyc' -delete && \
+    find /usr/lib/python3.12 -type f -name '*.pyo' -delete && \
+    find /usr/lib/python3.12/site-packages/babel/locale-data -mindepth 1 ! -name 'en_*' -a ! -name 'root.dat' -delete 2>/dev/null || true && \
+    find /usr/lib/python3.12/site-packages -type d -name tests -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/lib/python3.12/site-packages -type d -name testing -exec rm -rf {} + 2>/dev/null || true && \
+    rm -rf /usr/lib/python3.12/site-packages/pip /usr/lib/python3.12/site-packages/setuptools && \
+    apk del .build-deps
 
-RUN apt-get update && apt-get install -y python3-pip && rm -rf /var/lib/apt/lists/*
-RUN pip3 install --no-cache-dir --break-system-packages jupyter jupyterlab
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk
+ENV PATH=$JAVA_HOME/bin:$PATH
 
-RUN useradd -ms /bin/bash bootcamp
+RUN adduser -D -s /bin/bash bootcamp
 
 ENV SCALA_VERSION=2.12.10
 ENV ALMOND_VERSION=0.9.1
-
+ENV COURSIER_VERSION=2.1.24
 ENV COURSIER_CACHE=/coursier_cache
+ENV JUPYTER_CONFIG_DIR=/jupyter/config
+ENV JUPYTER_DATA_DIR=/jupyter/data
 
-ADD . /chisel-bootcamp/
+COPY . /chisel-bootcamp/
 WORKDIR /chisel-bootcamp
 
-ENV JUPYTER_CONFIG_DIR=/jupyter/config
-ENV JUPITER_DATA_DIR=/jupyter/data
-
-RUN mkdir -p $JUPYTER_CONFIG_DIR/custom
-RUN cp source/custom.js $JUPYTER_CONFIG_DIR/custom/
-RUN cp source/jupyter_server_config.py $JUPYTER_CONFIG_DIR/
+RUN mkdir -p $JUPYTER_CONFIG_DIR/custom && \
+    cp source/custom.js $JUPYTER_CONFIG_DIR/custom/ && \
+    cp source/jupyter_server_config.py $JUPYTER_CONFIG_DIR/
 
 # Second stage - download Scala requirements and the Scala kernel
-FROM base as intermediate-builder
+FROM base AS intermediate-builder
+
+ARG TARGETARCH
 
 RUN mkdir /coursier_cache
 
+# Install glibc and dependencies for coursier binaries (both amd64 and arm64 require glibc)
 RUN \
-    curl -L -o coursier https://git.io/coursier-cli && \
+    apk add --no-cache curl wget gcompat libstdc++ zlib && \
+    wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub && \
+    wget -q https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.35-r1/glibc-2.35-r1.apk && \
+    apk --no-cache --force-overwrite add glibc-2.35-r1.apk && \
+    rm glibc-2.35-r1.apk && \
+    if [ "$TARGETARCH" = "arm64" ]; then \
+        ln -s /lib/ld-musl-aarch64.so.1 /lib/ld-linux-aarch64.so.1 2>/dev/null || true; \
+    fi
+
+RUN \
+    case "$TARGETARCH" in \
+        amd64|"") \
+            CS_URL="https://github.com/coursier/coursier/releases/download/v${COURSIER_VERSION}/cs-x86_64-pc-linux.gz" ;; \
+        arm64) \
+            CS_URL="https://github.com/VirtusLab/coursier-m1/releases/download/v${COURSIER_VERSION}/cs-aarch64-pc-linux.gz" ;; \
+        *) \
+            echo "Unsupported architecture: $TARGETARCH" && exit 1 ;; \
+    esac && \
+    curl -fL --retry 3 "$CS_URL" | gzip -d > coursier && \
     chmod +x coursier && \
     ./coursier \
         bootstrap \
@@ -47,7 +83,7 @@ RUN \
         --default=true \
         -o almond && \
     ./almond --install --global && \
-    \rm -rf almond couriser /root/.cache/coursier 
+    rm -rf almond coursier /root/.cache/coursier
 
 # Execute a notebook to ensure Chisel is downloaded into the image for offline work
 # Disabled: dotvisualizer has JSON4s compatibility issues with Chisel 3.6
@@ -55,15 +91,13 @@ RUN \
 # RUN jupyter nbconvert --to notebook --output=/tmp/0_demo --execute 0_demo.ipynb
 
 # Last stage
-FROM base as final
+FROM base AS final
 
-# copy the Scala requirements and kernel into the image 
-COPY --from=intermediate-builder /coursier_cache/ /coursier_cache/
-COPY --from=intermediate-builder /usr/local/share/jupyter/kernels/scala/ /usr/local/share/jupyter/kernels/scala/
+# copy the Scala requirements and kernel into the image
+COPY --from=intermediate-builder --chown=bootcamp:bootcamp /coursier_cache/ /coursier_cache/
+COPY --from=intermediate-builder --chown=bootcamp:bootcamp /usr/local/share/jupyter/kernels/scala/ /usr/local/share/jupyter/kernels/scala/
 
-RUN chown -R bootcamp:bootcamp /chisel-bootcamp
-RUN chown -R bootcamp:bootcamp /jupyter
-RUN chown -R bootcamp:bootcamp /coursier_cache
+RUN chown -R bootcamp:bootcamp /chisel-bootcamp /jupyter
 
 USER bootcamp
 WORKDIR /chisel-bootcamp

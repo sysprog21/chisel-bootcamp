@@ -22,7 +22,7 @@ def _notebook_run(path):
                 "--allow-errors",
                 "--ExecutePreprocessor.timeout=60",
                 "--output", fout.name, path]
-        subprocess.check_call(args, stderr=True)
+        subprocess.check_call(args)
 
         fout.seek(0)
         nb = nbformat.read(fout, nbformat.current_nbformat)

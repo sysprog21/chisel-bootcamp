@@ -1,0 +1,61 @@
+3.1_parameters.ipynb
+  069919c6417e2c94 46-47,962
+3.3_higher-order_functions.ipynb
+  069919c6417e2c94 42-43,404
+3.5_object_oriented_programming.ipynb
+  069919c6417e2c94 46-47,504
+2.6_chiseltest.ipynb
+  069919c6417e2c94 53-54,62
+  a9bba3c17af28c65 197,290,302
+2.1_first_module.ipynb
+  069919c6417e2c94 54,379
+3.2_collections.ipynb
+  069919c6417e2c94 52-53,610
+3.6_types.ipynb
+  069919c6417e2c94 50-51
+2.3_control_flow.ipynb
+  069919c6417e2c94 49-50
+2.4_sequential_logic.ipynb
+  069919c6417e2c94 48-49
+2.5_exercise.ipynb
+  069919c6417e2c94 42-43
+2.2_comb_logic.ipynb
+  069919c6417e2c94 48-49,506
+3.2_interlude.ipynb
+  069919c6417e2c94 42-43
+3.4_functional_programming.ipynb
+  069919c6417e2c94 49-50,623
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "6674c828d3188a1659782892060a07db1b82c27d",
+  "prompts": {
+    "069919c6417e2c94": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d1635-4790-7430-97a1-c4740b55b688",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Jim Huang <jserv@ccns.ncku.edu.tw>",
+      "messages": [],
+      "total_additions": 171,
+      "total_deletions": 33,
+      "accepted_lines": 171,
+      "overriden_lines": 0
+    },
+    "a9bba3c17af28c65": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d163a-2954-7251-bd72-af7d5debf812",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Jim Huang <jserv@ccns.ncku.edu.tw>",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 28,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    }
+  }
+}

@@ -1,23 +1,27 @@
 #!/bin/bash
+set -e
 
-SCALA_VERSION=2.12.10
-ALMOND_VERSION=0.9.1
+SCALA_VERSION=2.13.18
+ALMOND_VERSION=0.14.5
+COURSIER_VERSION=2.1.24
 
-# Install coursier
-curl -Lo coursier https://git.io/coursier-cli
+# Chisel 7 simulates with ChiselSim, which needs Verilator 5 or newer
+command -v verilator >/dev/null || { echo "ERROR: verilator not found" >&2; exit 1; }
+VERILATOR=$(verilator --version)
+echo "$VERILATOR"
+[ "$(echo "$VERILATOR" | sed -E 's/^Verilator ([0-9]+).*/\1/')" -ge 5 ] || { echo "ERROR: Verilator 5 or newer is required" >&2; exit 1; }
+
+# Install coursier (the JVM launcher works on every platform)
+curl -fLo coursier "https://github.com/coursier/coursier/releases/download/v${COURSIER_VERSION}/coursier"
 chmod +x coursier
 
 # Install almond
 ./coursier bootstrap \
     -r jitpack \
-    -i user -I user:sh.almond:scala-kernel-api_$SCALA_VERSION:$ALMOND_VERSION \
     sh.almond:scala-kernel_$SCALA_VERSION:$ALMOND_VERSION \
-    --sources --default=true \
+    --default=true \
     -o almond
 ./almond --install
-
-# Install required Jupyter/JupyterLab extensions
-jupyter labextension install @jupyterlab/plotly-extension
 
 # Install custom Javascript for solutions
 mkdir -p ~/.jupyter/custom

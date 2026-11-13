@@ -1,20 +1,26 @@
 # First stage : setup the system and environment
 FROM alpine:3.22 AS base
 
-# Install OpenJDK 11 and runtime dependencies
+# Install OpenJDK 17 and runtime dependencies.
+# Chisel 7 simulates with ChiselSim, which drives Verilator, so a C++ toolchain
+# (g++, make, musl-dev) and Perl (Verilator is a Perl script) are runtime dependencies.
 RUN \
     apk add --no-cache \
-        openjdk11-jre-headless \
+        openjdk17-jre-headless \
         graphviz \
         python3 \
         py3-pip \
         bash \
         libstdc++ \
+        verilator \
+        verilator-dev \
+        g++ \
+        make \
+        musl-dev \
+        perl \
         && \
     apk add --no-cache --virtual .build-deps \
         gcc \
-        g++ \
-        musl-dev \
         linux-headers \
         python3-dev \
         && \
@@ -28,18 +34,23 @@ RUN \
     rm -rf /usr/lib/python3.12/site-packages/pip /usr/lib/python3.12/site-packages/setuptools && \
     apk del .build-deps
 
-ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
 ENV PATH=$JAVA_HOME/bin:$PATH
 
 RUN adduser -D -s /bin/bash bootcamp
 
-ENV SCALA_VERSION=2.12.10
-ENV ALMOND_VERSION=0.9.1
+ENV SCALA_VERSION=2.13.18
+ENV ALMOND_VERSION=0.14.5
 ENV COURSIER_VERSION=2.1.24
+ENV CHISEL_VERSION=7.16.0
+# Must be the firtool version that Chisel $CHISEL_VERSION was published against
+ENV FIRTOOL_VERSION=1.160.0
 ENV JUPYTER_CONFIG_DIR=/jupyter/config
 ENV JUPYTER_DATA_DIR=/jupyter/data
 
-COPY . /chisel-bootcamp/
+# Only the Jupyter configuration is needed here; the notebooks are copied last (final stage)
+# so that editing them does not invalidate the cached dependency downloads.
+COPY source/custom.js source/jupyter_server_config.py source/overrides.json /chisel-bootcamp/source/
 WORKDIR /chisel-bootcamp
 
 RUN mkdir -p $JUPYTER_CONFIG_DIR/custom && \
@@ -48,35 +59,22 @@ RUN mkdir -p $JUPYTER_CONFIG_DIR/custom && \
     cp source/jupyter_server_config.py $JUPYTER_CONFIG_DIR/ && \
     cp source/overrides.json $JUPYTER_CONFIG_DIR/lab/user-settings/@jupyterlab/apputils-extension/notification.jupyterlab-settings
 
+# Ammonite and the build stage use this preloaded cache
+ENV COURSIER_CACHE=/coursier_cache
+
 # Second stage - download Scala requirements and the Scala kernel
 FROM base AS intermediate-builder
 
 ARG TARGETARCH
 
+# Download everything into the cache that the final image uses at runtime
 RUN mkdir /coursier_cache
 
-# Install glibc for ARM64 coursier binary (x86-64 uses static musl build)
+# The JVM launcher of coursier works on every architecture.
 RUN \
-    if [ "$TARGETARCH" = "arm64" ]; then \
-        apk add --no-cache wget gcompat libstdc++ && \
-        wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub && \
-        wget -q https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.35-r1/glibc-2.35-r1.apk && \
-        apk --no-cache --force-overwrite add glibc-2.35-r1.apk && \
-        rm glibc-2.35-r1.apk && \
-        ln -s /lib/ld-musl-aarch64.so.1 /lib/ld-linux-aarch64.so.1 2>/dev/null || true; \
-    fi
-
-RUN \
-    apk add --no-cache curl && \
-    case "$TARGETARCH" in \
-        amd64|"") \
-            CS_URL="https://github.com/coursier/coursier/releases/download/v${COURSIER_VERSION}/cs-x86_64-pc-linux-static.gz" ;; \
-        arm64) \
-            CS_URL="https://github.com/VirtusLab/coursier-m1/releases/download/v${COURSIER_VERSION}/cs-aarch64-pc-linux.gz" ;; \
-        *) \
-            echo "Unsupported architecture: $TARGETARCH" && exit 1 ;; \
-    esac && \
-    curl -fL --retry 3 "$CS_URL" | gzip -d > coursier && \
+    apk add --no-cache curl unzip && \
+    curl -fL --retry 3 -o coursier \
+        "https://github.com/coursier/coursier/releases/download/v${COURSIER_VERSION}/coursier" && \
     chmod +x coursier && \
     ./coursier \
         bootstrap \
@@ -85,34 +83,59 @@ RUN \
         --default=true \
         -o almond && \
     ./almond --install --global && \
-    # Preload Chisel dependencies - coursier fetch downloads to its default cache
-    # which gets picked up by Ammonite at runtime
-    ./coursier fetch \
+    # Preload Chisel dependencies into the coursier cache, which Ammonite uses at runtime
+    # (Ammonite also looks for the source jars, so fetch them too)
+    ./coursier fetch --sources --default=true \
         --intransitive \
-        edu.berkeley.cs:chisel3-plugin_2.12.10:3.6.1 \
+        org.chipsalliance:chisel-plugin_$SCALA_VERSION:$CHISEL_VERSION \
         && \
-    ./coursier fetch \
-        edu.berkeley.cs:chisel3_2.12:3.6.1 \
-        edu.berkeley.cs:chisel-iotesters_2.12:2.5.6 \
-        edu.berkeley.cs:chiseltest_2.12:0.6.1 \
-        edu.berkeley.cs:dsptools_2.12:1.5.6 \
-        edu.berkeley.cs:rocket-dsptools_2.12:1.2.0 \
-        org.scalanlp:breeze_2.12:1.0 \
-        org.scalatest:scalatest_2.12:3.2.2 \
+    ./coursier fetch --sources --default=true \
+        org.chipsalliance:chisel_2.13:$CHISEL_VERSION \
+        org.scalatest:scalatest_2.13:3.2.19 \
         && \
     rm -rf almond coursier
+
+# Chisel 7 emits SystemVerilog by running CIRCT's `firtool`, a self-contained static x86-64
+# executable (Maven Central ships it inside the llvm-firtool jar). Install it once here so
+# the bootcamp works offline. There is no native Linux/Arm64 build of firtool: on Arm64 it
+# runs through qemu-user (the rest of the toolchain, including Verilator, is native).
+RUN \
+    mkdir -p /opt/firtool/bin && \
+    curl -fL --retry 3 -o firtool.jar \
+        "https://repo1.maven.org/maven2/org/chipsalliance/llvm-firtool/${FIRTOOL_VERSION}/llvm-firtool-${FIRTOOL_VERSION}-linux-x64.jar" && \
+    unzip -p firtool.jar org.chipsalliance/llvm-firtool/linux-x64/bin/firtool > /opt/firtool/bin/firtool.x86_64 && \
+    rm firtool.jar && \
+    chmod +x /opt/firtool/bin/firtool.x86_64 && \
+    if [ "$TARGETARCH" = "arm64" ]; then \
+        apk add --no-cache qemu-x86_64 && \
+        printf '#!/bin/sh\nexec qemu-x86_64 /opt/firtool/bin/firtool.x86_64 "$@"\n' > /opt/firtool/bin/firtool && \
+        chmod +x /opt/firtool/bin/firtool; \
+    else \
+        mv /opt/firtool/bin/firtool.x86_64 /opt/firtool/bin/firtool; \
+    fi
 
 # Last stage
 FROM base AS final
 
-# Set COURSIER_CACHE environment variable so Ammonite uses our preloaded cache
-ENV COURSIER_CACHE=/coursier_cache
+ARG TARGETARCH
+
+# On Arm64 firtool (an x86-64 executable) runs through qemu-user, see above
+RUN if [ "$TARGETARCH" = "arm64" ]; then apk add --no-cache qemu-x86_64; fi
+
+
+# Tell Chisel where to find the preinstalled firtool instead of downloading one
+ENV CHISEL_FIRTOOL_PATH=/opt/firtool/bin
 
 # copy the Scala requirements and kernel into the image
 COPY --from=intermediate-builder --chown=bootcamp:bootcamp /coursier_cache/ /coursier_cache/
 COPY --from=intermediate-builder --chown=bootcamp:bootcamp /usr/local/share/jupyter/kernels/scala/ /usr/local/share/jupyter/kernels/scala/
+COPY --from=intermediate-builder /opt/firtool/ /opt/firtool/
 
-RUN chown -R bootcamp:bootcamp /chisel-bootcamp /jupyter /coursier_cache
+COPY --chown=bootcamp:bootcamp . /chisel-bootcamp/
+
+# The directory itself is root-owned (created by WORKDIR); ChiselSim writes ./build and Jupyter
+# writes checkpoints there.
+RUN chown -R bootcamp:bootcamp /jupyter && chown bootcamp:bootcamp /chisel-bootcamp
 
 USER bootcamp
 WORKDIR /chisel-bootcamp

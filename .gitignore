@@ -12,3 +12,5 @@
 # Jupyter-scala scripts
 coursier
 almond
+/build
+*.sv

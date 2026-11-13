@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Keep the GitHub Actions used by the workflows current
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  # Keep the base image of the Dockerfile current
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

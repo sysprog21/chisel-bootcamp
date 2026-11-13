@@ -2,7 +2,7 @@
 
 If you want to run the bootcamp locally, follow the instructions below for your platform.
 
-Note: Java 11 or later is recommended. If you have multiple Java versions installed, select the appropriate version before running `jupyter notebook`:
+Note: Java 17 or later is recommended (Java 11 also works). If you have multiple Java versions installed, select the appropriate version before running `jupyter notebook`:
 
 * On Windows: https://gist.github.com/rwunsch/d157d5fe09e9f7cdc858cec58c8462d6
 * On macOS: https://stackoverflow.com/questions/21964709/how-to-set-or-change-the-default-java-jdk-version-on-os-x
@@ -14,9 +14,10 @@ Make sure you have Docker [installed](https://docs.docker.com/get-docker/) on yo
 #### Prebuilt Multi-Architecture Image (Recommended)
 
 The `sysprog21/chisel-bootcamp` image supports both x86-64 and Arm64 architectures. It bundles:
-- Ubuntu 24.04
-- [Eclipse Temurin](https://adoptium.net/temurin) 8
-- Scala 2.12.10 with Almond 0.9.1 kernel
+- Alpine Linux 3.22 with OpenJDK 17
+- Scala 2.13.18 with Almond 0.14.5 kernel
+- Chisel 7.16.0 and CIRCT firtool 1.160.0 (preinstalled, so the image also works offline)
+- Verilator and a C++ toolchain, used by ChiselSim to simulate designs
 - Jupyter Lab
 - Graphviz for circuit visualization
 
@@ -54,7 +55,7 @@ For this bootcamp, we'll install jupyter first and then the Scala-specific jupyt
 #### Jupyter
 First install Jupyter.
 
-Dependencies: openssh-client, openjdk-11-jre, openjdk-11-jdk (-headless OK for both), ca-certificates-java
+Dependencies: curl, openssh-client, openjdk-17-jre (-headless OK), ca-certificates-java, Verilator 5 or newer, a C++ compiler (g++ or clang++) and make
 
 Install Jupyter using pip3 (see [Jupyter installation docs](https://jupyter.org/install)):
 ```
@@ -81,10 +82,23 @@ Download coursier and use it to install Almond (see [Almond installation docs](h
 ```bash
 curl -L -o coursier https://github.com/coursier/coursier/releases/latest/download/coursier
 chmod +x coursier
-./coursier launch --use-bootstrap almond -- --install
 ```
 
-This installs Almond with compatible Scala 2.12 versions. You can delete the `coursier` file afterward if desired.
+Chisel 7 needs Scala 2.13, so ask for that Scala version explicitly (the notebooks use Scala 2.13.18):
+```bash
+./coursier bootstrap -r jitpack sh.almond:scala-kernel_2.13.18:0.14.5 --default=true -o almond
+./almond --install
+```
+You can delete the `coursier` and `almond` files afterward if desired.
+
+#### Verilator
+
+Chisel simulates designs with ChiselSim ([documentation](https://www.chisel-lang.org)), which runs [Verilator](https://verilator.org) (version 5 or newer) and compiles the result with a C++ compiler.
+For example, on Debian/Ubuntu: `sudo apt install verilator g++ make` (Ubuntu 24.04 or newer provides Verilator 5), on macOS: `brew install verilator`.
+Check with `verilator --version`.
+
+Chisel also needs CIRCT's `firtool` to generate SystemVerilog. You don't have to install it: Chisel downloads the matching version on first use (this needs Internet access once).
+You can also point the `CHISEL_FIRTOOL_PATH` environment variable at a directory that contains `firtool` 1.160.0.
 
 #### Visualizations
 
@@ -95,7 +109,7 @@ Now clone the bootcamp repo and install the customization script.
 If you already have one, append this script to it.
 
 ```
-git clone https://github.com/freechipsproject/chisel-bootcamp.git
+git clone https://github.com/sysprog21/chisel-bootcamp.git
 cd chisel-bootcamp
 mkdir -p ~/.jupyter/custom
 cp source/custom.js ~/.jupyter/custom/custom.js
@@ -115,7 +129,7 @@ These instructions cover Windows 10 and later. Running the command prompt in Adm
 
 #### Install Java
 
-Ensure Java 11 or later is installed. Test by typing `java -version` in a command prompt. If not found, install from [Adoptium](https://adoptium.net/temurin/releases/).
+Ensure Java 17 or later is installed. Test by typing `java -version` in a command prompt. If not found, install from [Adoptium](https://adoptium.net/temurin/releases/).
 
 #### Install Jupyter
 Jupyter recommends using the Anaconda distribution, here is the
@@ -133,15 +147,18 @@ Download the latest Coursier from [GitHub releases](https://github.com/coursier/
 
 Navigate to your download folder and run:
 ```bash
-java -jar coursier launch almond -- --install
+java -jar coursier bootstrap -r jitpack sh.almond:scala-kernel_2.13.18:0.14.5 --default=true -o almond
+java -jar almond --install
 ```
+
+Chisel's simulations need Verilator, which is not available natively on Windows. Install and use the bootcamp inside [WSL 2](https://learn.microsoft.com/windows/wsl/) (follow the Linux instructions there) or use the Docker image.
 
 #### Visualizations
 
 [Graphviz](https://graphviz.org/download/) is required to show visualizations of Chisel modules, such as in the demo page. However, visualizations are optional as the other Chisel and Scala features will work without it.
 
 #### Install the chisel-bootcamp repo.
-Download the [chisel-bootcamp](https://github.com/freechipsproject/chisel-bootcamp) as a zip file (or use a Windows git client)
+Download the [chisel-bootcamp](https://github.com/sysprog21/chisel-bootcamp) as a zip file (or use a Windows git client)
 and unpack it in a directory you have access to.
 Ideally, you should put it in a path that has no spaces.
 

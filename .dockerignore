@@ -13,3 +13,6 @@ __pycache__
 *.swp
 *.swo
 *~
+build/
+target/
+out/

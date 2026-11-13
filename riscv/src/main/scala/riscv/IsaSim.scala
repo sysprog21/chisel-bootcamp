@@ -188,6 +188,7 @@ object IsaSim {
     case "sra"  => a >> b
     case "or"   => a | b
     case "and"  => a & b
+    case _      => throw new IllegalArgumentException(s"not an ALU operation: $op")
   }
 
   /** Assembles `source` and runs it until it halts. */

@@ -4,22 +4,11 @@ import chisel3._
 import chisel3.simulator.scalatest.ChiselSim
 import org.scalatest.flatspec.AnyFlatSpec
 
-/** Checks the ALU against a Scala model on random operands (a fixed seed, so failures repeat). */
+/** Checks the ALU against the golden model's ALU (IsaSim.alu) on random operands (a fixed seed,
+  * so failures repeat).
+  */
 class AluSpec extends AnyFlatSpec with ChiselSim {
-  // Scala's Int behaves like a 32-bit register: it wraps around, `<<`, `>>` and `>>>` use the low 5
-  // bits of the shift amount, and `>>` is arithmetic
-  def model(op: AluOp.Type, a: Int, b: Int): Int = op match {
-    case AluOp.Add  => a + b
-    case AluOp.Sub  => a - b
-    case AluOp.Sll  => a << b
-    case AluOp.Slt  => if (a < b) 1 else 0
-    case AluOp.Sltu => if (Integer.compareUnsigned(a, b) < 0) 1 else 0
-    case AluOp.Xor  => a ^ b
-    case AluOp.Srl  => a >>> b
-    case AluOp.Sra  => a >> b
-    case AluOp.Or   => a | b
-    case AluOp.And  => a & b
-  }
+  def model(op: AluOp.Type, a: Int, b: Int): Int = IsaSim.alu(AluOp.mnemonic(op), a, b)
 
   private def unsigned(x: Int) = BigInt(Integer.toUnsignedLong(x))
 

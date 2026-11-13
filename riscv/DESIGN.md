@@ -123,9 +123,11 @@ all-ones mask counts as none), so a masked write would write every byte (see 2.8
 `SingleCycleCore` retires one instruction per cycle and depends on that same-cycle answer (it
 ignores `ready`); a bus that answers later needs a core that tracks its requests. It reports each
 retired instruction on a `Valid(RetireInfo)` port with the fields of `IsaSim`'s `Retire`, and
-`CoSim` runs a program on the core and on `IsaSim` and returns the first difference. Its tests run
-directed programs (each feature, every halt cause), the committed programs and random programs
-through `CoSim`.
+`CoSim` runs a program on a core with its RAM (any `RiscvSystem`: the load, retire, halted and
+debug ports of `SystemIO`) and on `IsaSim`, and returns the first difference. The tests run
+directed programs (each feature, every halt cause), the committed programs, random programs, and
+`programs/regress/*.S`, programs that once exposed a bug (`RegressSpec`), through `CoSim`. Reset
+does not clear the RAM or the registers, so a program may read only what it wrote, or its image.
 
 ## The official tests
 
@@ -140,3 +142,27 @@ expanded files; for all of them its output is identical to GNU as and ld 2.44 wi
 `fence_i` (Zifencei) and `ma_data` (misaligned accesses, which halt the cores) are left out
 (`programs/riscv-tests/EXCLUDED`). `ComplianceSpec` runs the others on `IsaSim` and on the
 single-cycle core (through `CoSim`, so each retired instruction is compared too).
+
+## The five-stage pipeline
+
+`PipelinedCore` (`src/main/scala/riscv/PipelinedCore.scala`) runs IF, ID, EX, MEM and WB, with
+stage registers made by `Stage` (a `Valid` register with an enable and a flush). Jumps and branches
+are resolved in EX, and the two younger instructions are flushed when one is taken; an instruction
+that halts the core flushes all younger ones when it is in MEM, the last stage that finds a halt
+cause, so none of them changes memory or registers. Its register reads see a register that WB
+writes in the same cycle (written first, read second), but it handles no other data hazard:
+programs for it are assembled with `Asm.padded(source, 2)`, two nops after every instruction.
+`PipelineFlush` (which stage registers to flush) is the exercise. It shares `Core`, `CoreSystem`
+and `CoSim` with the single-cycle core; padded riscv-tests no longer fit their branch range, so
+the official tests run on the pipeline once it handles hazards (Module 5.7).
+
+## Hazards
+
+`ForwardingCore` (`src/main/scala/riscv/ForwardingCore.scala`) is the pipeline with its hazards
+handled, so programs need no nops: EX takes its operands through `Forward` (EX/MEM first, then
+MEM/WB, never for x0; the exercise), a load followed by a use of its value stalls one cycle
+(`loadUse`), and while the data memory has not answered the whole pipeline holds (`memWait`; EX
+keeps its forwarded operands, and redirects wait; the instruction memory must still answer in the
+same cycle). It passes the rv32ui tests unchanged. `CoSim.timed` counts cycles: ForwardingSpec
+prints the CPI of the Fibonacci and factorial programs and checks that it beats the padded 5.6
+pipeline. The memory-wait path is tested with a data memory that answers two cycles late.

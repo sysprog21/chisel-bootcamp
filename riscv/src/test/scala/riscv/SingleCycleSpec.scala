@@ -4,9 +4,6 @@ import chisel3._
 import chisel3.simulator.scalatest.ChiselSim
 import org.scalatest.flatspec.AnyFlatSpec
 
-import scala.io.Source
-import scala.util.Using
-
 class SingleCycleSpec extends AnyFlatSpec with ChiselSim {
   private def unsigned(x: Int) = BigInt(Integer.toUnsignedLong(x))
 
@@ -121,7 +118,7 @@ class SingleCycleSpec extends AnyFlatSpec with ChiselSim {
     "fetch outside the RAM"  -> "lui t0, 0x10\njr t0"
   )
 
-  def program(name: String): String = Using.resource(Source.fromFile(s"programs/src/$name.S"))(_.mkString)
+  def program(name: String): String = TestPrograms.source("programs/src", name)
 
   "SingleCycleCore" should "retire directed programs, every halt, and the committed programs like the golden model" in {
     simulate(new SingleCycleSystem) { c =>

@@ -30,7 +30,12 @@ extensions (M, A, C, F, ...). The CSR instructions (SYSTEM opcode, funct3 != 0) 
 
 Without CSRs there is no trap handler, so `ECALL`, `EBREAK`, an illegal instruction and a
 misaligned access (load/store, or a branch/jump target that is not 4-byte aligned) halt the
-core, which reports the cause on its retire port. `FENCE` is a no-op.
+core, which reports the cause on its retire port. So does an access (or a fetch) outside the RAM,
+until the bus and its memory-mapped devices arrive (Module 5.11). `FENCE` is a no-op. An
+instruction that halts the core retires without changing any state: a jump to a misaligned target
+does not write its link register. An access that is both misaligned and outside the RAM halts as
+misaligned, and a fetch outside the RAM retires with instruction word 0; the cores must report the
+same, since their retire records are compared with the golden model's.
 
 ## Exercises and solutions
 
@@ -91,3 +96,16 @@ with GNU output too, and assembles each of the 40 instructions.
 Without a C compiler the course has no C programs. A student who wants one can install a bare-metal
 RISC-V GCC (`-march=rv32i -mabi=ilp32 -nostdlib`, linked at `0x8000_0000` with `.text` first) and
 convert its output with `objcopy -O binary` and `hexdump -v -e '1/4 "%08x\n"'`.
+
+## The golden model
+
+`riscv.IsaSim` (`src/main/scala/riscv/IsaSim.scala`) interprets RV32I one instruction at a time and
+reports each as a `Retire` record: PC, instruction, next PC, register write, memory access and halt
+cause, the fields of the cores' RVFI-style retire port. Tests compare a core's retire stream with
+it, not only the final state. It is a teaching oracle written together with the course (it uses
+`Rv32i.decode`), not an independent reference; the riscv-tests suite (Module 5.5) is the
+independent check.
+
+`riscv.RandomProgram(seed)` writes a random RV32I program in assembly that halts by construction:
+branches and jumps only go forward, loads and stores stay in a 1 KB data area based on `s11`. A
+program that exposes a difference can be saved as a `.S` file and kept as a regression test.

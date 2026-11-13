@@ -92,7 +92,7 @@ object Rv32i {
   def isAluImm(name: String): Boolean   = encodings.get(name).exists(_.opcode == 0x13) // addi ... srai
 
   private def bits(x: Long, hi: Int, lo: Int): Int = ((x >>> lo) & ((1L << (hi - lo + 1)) - 1)).toInt
-  private def signExtend(x: Int, width: Int): Int  = (x << (32 - width)) >> (32 - width)
+  def signExtend(x: Int, width: Int): Int          = (x << (32 - width)) >> (32 - width)
 
   /** The 32-bit word of `i` (as a non-negative Long). */
   def encode(i: Inst): Long = {

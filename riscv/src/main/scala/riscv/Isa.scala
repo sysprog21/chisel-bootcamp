@@ -78,6 +78,12 @@ object Instructions {
   val ECALL  = BitPat("b00000000000000000000000001110011")
   val EBREAK = BitPat("b00000000000100000000000001110011")
 
+  /** The names of the patterns of `all` that match `word`: exactly one for an RV32I instruction. */
+  def matching(word: Long): Seq[String] = {
+    val w = BitPat(word.U(32.W))
+    all.collect { case (name, p) if p.cover(w) => name }
+  }
+
   /** All 40 RV32I instructions (FENCE.I belongs to Zifencei, not RV32I). */
   val all: Seq[(String, BitPat)] = Seq(
     "LUI"    -> LUI,

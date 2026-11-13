@@ -194,7 +194,12 @@ everything the project needs are preinstalled, so it works offline. Open a termi
 cd riscv
 sbt test               # compile and run every test (ChiselSim tests need Verilator)
 sbt "testOnly riscv.IsaSpec"
+# assemble a test program into the memory image that the processors load
+sbt "runMain riscv.Asm programs/src/fib.S programs/hex/fib.hex"
 ```
+
+The programs are RV32I assembly, assembled by the project's own assembler (`riscv.Asm`); no RISC-V
+compiler is needed (see `riscv/DESIGN.md`).
 
 Outside Docker, install [sbt](https://www.scala-sbt.org/download/) (any 1.x launcher; the project
 pins its sbt version in `riscv/project/build.properties`), a JDK 17 or later (what the image uses),

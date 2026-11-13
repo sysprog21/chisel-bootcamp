@@ -1,60 +1,100 @@
 #!/usr/bin/env python3
+"""Run the bootcamp notebooks in the Scala (Almond) kernel and check their errors.
+
+Many cells are exercises (they contain `???`) or demonstrate an error on purpose, so a
+notebook is not expected to run without errors. Each notebook below lists the errors that
+are expected, in order; the run fails if the notebook reports anything else.
+
+Usage: runtest.py [notebook_name.ipynb] [notebook_name_2.ipynb] [...]
+"""
 import itertools
+import json
 import os
-import sys
+import queue
 import subprocess
-import tempfile
+import sys
+import time
 
-from typing import Any, Dict, List
+from typing import Dict, List, Tuple
 
-import nbformat
+from jupyter_client.manager import start_new_kernel
+
+ROOT = os.path.dirname(os.path.abspath(__file__))
+# The first cell downloads and compiles dependencies, each `simulate` runs Verilator.
+CELL_TIMEOUT = int(os.environ.get("BOOTCAMP_CELL_TIMEOUT", "600"))
+
+NOT_IMPLEMENTED = "scala.NotImplementedError"
+COMPILATION_FAILED = "Compilation Failed"
 
 
-def _notebook_run(path):
-    """Execute a notebook via nbconvert and collect output.
-       :returns (parsed nb object, execution errors)
+def _notebook_run(path: str) -> List[Tuple[int, str]]:
+    """Execute every code cell of a notebook in a fresh kernel.
+
+    :returns the errors as a list of (cell index, "<error name>: <error value>").
     """
-    dirname, __ = os.path.split(path)
-    if len(dirname) > 0:
-        os.chdir(dirname)
-    with tempfile.NamedTemporaryFile(suffix=".ipynb", mode='w+') as fout:
-        args = ["jupyter-nbconvert", "--to", "notebook", "--execute",
-                "--allow-errors",
-                "--ExecutePreprocessor.timeout=60",
-                "--output", fout.name, path]
-        subprocess.check_call(args)
+    with open(path, encoding="utf-8") as f:
+        nb = json.load(f)
 
-        fout.seek(0)
-        nb = nbformat.read(fout, nbformat.current_nbformat)
+    # The notebooks load `source/load-ivy.sc` relative to the working directory.
+    os.chdir(ROOT)
+    # The kernel logs the stack trace of every error to its stderr; they are checked below.
+    km, kc = start_new_kernel(
+        kernel_name="scala", startup_timeout=300, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
+    errors: List[Tuple[int, str]] = []
+    try:
+        for index, cell in enumerate(nb["cells"]):
+            if cell["cell_type"] != "code":
+                continue
+            source = "".join(cell["source"])
+            if not source.strip():
+                continue
+            msg_id = kc.execute(source)
+            timed_out = False
+            deadline = time.monotonic() + CELL_TIMEOUT  # for the whole cell, however chatty it is
+            while True:
+                try:
+                    msg = kc.get_iopub_msg(timeout=max(0.0, deadline - time.monotonic()))
+                except queue.Empty:
+                    errors.append((index, "Timeout: cell did not finish"))
+                    km.interrupt_kernel()
+                    timed_out = True
+                    break
+                if msg["parent_header"].get("msg_id") != msg_id:
+                    continue
+                if msg["msg_type"] == "error":
+                    content = msg["content"]
+                    errors.append((index, "{}: {}".format(content["ename"], content["evalue"])))
+                elif msg["msg_type"] == "status" and msg["content"]["execution_state"] == "idle":
+                    break
+            if timed_out:  # the kernel state can no longer be trusted: don't wait for the next cells
+                break
+    finally:
+        kc.stop_channels()
+        km.shutdown_kernel(now=True)
+    return errors
 
-    errors = [output for cell in nb.cells if "outputs" in cell
-              for output in cell["outputs"] \
-              if output.output_type == "error"]
 
-    return nb, errors
-
-
-def check_errors(file_name, expected: List[str], actual: List[Any]) -> bool:
-    """When errors occur they are due to a mismatch in the errors that occurred at runtime
-    and the expected error that are defined in notebooks
-    This produces huge output but the relevant information is between bars of '=' at the end.
-    Look at what was expected and either fix the error or add the text of the error that occurred
-    :note Errors shown may have hidden escape sequence for colors etc. When pasting be careful about this.
+def check_errors(file_name: str, expected: List[str], actual: List[Tuple[int, str]]) -> bool:
+    """When errors occur they are due to a mismatch between the errors that occurred at
+    runtime and the errors that are expected, which are defined below.
+    Look at what was expected and either fix the notebook or add the text of the error that
+    occurred.
 
     :param file_name: name of file where errors occurred
     :param expected:  errors that were expected
-    :param actual:    errors that occurred.
-    :return:
+    :param actual:    errors that occurred: (cell index, error).
+    :return: True if the actual errors are exactly the expected ones
     """
-    actual_tracebacks: List[str] = list(map(lambda x: str(x['traceback'][0][:100]), actual))
-
     return_value = True
-    for i, (e, a) in enumerate(itertools.zip_longest(expected, actual_tracebacks, fillvalue="-- No Error --")):
-        if e not in a:
+    for i, (e, a) in enumerate(itertools.zip_longest(expected, actual, fillvalue=None)):
+        if e is None or a is None or e not in a[1]:
             if return_value:
                 print("=" * 100, file=sys.stderr)
                 print(f"Errors detected in {file_name}", file=sys.stderr)
-            print(f"No match for {i}-th expected error '{e}' got '{a[:100]}'", file=sys.stderr)
+            got = "-- No Error --" if a is None else f"cell {a[0]}: {a[1][:100]!r}"
+            print(f"No match for {i}-th expected error {e if e else '-- No Error --'!r}, got {got}",
+                  file=sys.stderr)
             return_value = False
     if not return_value:
         print("=" * 100, file=sys.stderr)
@@ -62,58 +102,52 @@ def check_errors(file_name, expected: List[str], actual: List[Any]) -> bool:
 
 
 notebooks: Dict[str, List[str]] = {
-    # This is the list of pages to try and rum along with each pages expected errors.
-
+    # This is the list of pages to try and run along with each page's expected errors.
+    # (a substring of "<error name>: <error value>" per error, in order of occurrence)
+    "0_demo.ipynb": [],
     "1_intro_to_scala.ipynb": [],
-    "2.1_first_module.ipynb": ["chisel3.internal.ChiselException: Exception thrown when elaborating ChiselGeneratorAnnotation"],
-    "2.2_comb_logic.ipynb": ['Compilation Failed'] +
-                            ['chisel3.internal.ChiselException: Exception thrown when elaborating ChiselGeneratorAnnotation'] +
-                            ['chisel3.internal.ChiselException: Exception thrown when elaborating ChiselGeneratorAnnotation'] +
-                            ['chisel3.internal.ChiselException: Exception thrown when elaborating ChiselGeneratorAnnotation'],
-    "2.3_control_flow.ipynb": ['scala.NotImplementedError'] * 2 +
-                              ['Compilation Failed'] +
-                              ['scala.NotImplementedError'] +
-                              ['Compilation Failed'],
-    "2.4_sequential_logic.ipynb": ['chisel3.internal.ChiselException: Exception thrown when elaborating ChiselGeneratorAnnotation'] * 2,
-    "2.5_exercise.ipynb": ['chisel3.internal.ChiselException: Exception thrown when elaborating ChiselGeneratorAnnotation'] * 3 +
-                          ['Compilation Failed'],
-    "2.6_chiseltest.ipynb": [],
-    "3.1_parameters.ipynb": ['java.util.NoSuchElementException'],
-    "3.2_collections.ipynb": [
-        'chisel3.internal.ChiselException: Exception thrown when elaborating ChiselGeneratorAnnotation'],
+    "2.1_first_module.ipynb": [NOT_IMPLEMENTED],
+    "2.2_comb_logic.ipynb": [COMPILATION_FAILED] + [NOT_IMPLEMENTED] * 3,
+    "2.3_control_flow.ipynb": [NOT_IMPLEMENTED] * 2 + [COMPILATION_FAILED] + [NOT_IMPLEMENTED] + [COMPILATION_FAILED],
+    "2.4_sequential_logic.ipynb": [NOT_IMPLEMENTED] * 2,
+    "2.5_exercise.ipynb": [NOT_IMPLEMENTED] * 3,
+    "2.6_chiselsim.ipynb": [],
+    "3.1_parameters.ipynb": ["java.util.NoSuchElementException"],
+    "3.2_collections.ipynb": [NOT_IMPLEMENTED],
     "3.2_interlude.ipynb": [],
-    "3.3_higher-order_functions.ipynb": ['scala.NotImplementedError'] +
-                                        ['java.lang.UnsupportedOperationException'] +
-                                        ['scala.NotImplementedError'] * 2 +
-                                        ['chisel3.internal.ChiselException: Exception thrown when elaborating ChiselGeneratorAnnotation'],
-    "3.4_functional_programming.ipynb": ['scala.NotImplementedError'] +
-                                        ['Compilation Failed'] +
-                                        ['scala.NotImplementedError'] +
-                                        ['Compilation Failed'],
-    "3.5_object_oriented_programming.ipynb": ['Compilation Failed'],
-    "3.6_types.ipynb": ['chisel3.internal.ChiselException: Connection between sink'] +
-                       ['Failed to elaborate Chisel circuit'] +
+    "3.3_higher-order_functions.ipynb": [NOT_IMPLEMENTED] +
+                                        ["java.lang.UnsupportedOperationException"] +
+                                        [NOT_IMPLEMENTED] * 3,
+    "3.4_functional_programming.ipynb": [NOT_IMPLEMENTED, COMPILATION_FAILED, NOT_IMPLEMENTED, COMPILATION_FAILED],
+    "3.5_object_oriented_programming.ipynb": [],
+    "3.6_types.ipynb": ["ChiselException: Connection between sink"] +
+                       ["I give up!"] +
                        ['expected ")"'] +
-                       ['scala.MatchError: ChiselExecutionFailure'] +
-                       ['Compilation Failed'] * 5,
-    "4.1_firrtl_ast.ipynb": [],
-    "4.2_firrtl_ast_traversal.ipynb": [],
-    "4.3_firrtl_common_idioms.ipynb": [],
-    "4.4_firrtl_add_ops_per_module.ipynb": ['FirrtlInternalException'],  # bug 129
+                       [NOT_IMPLEMENTED] * 2 +
+                       [COMPILATION_FAILED] * 4,
+    "4.1_firrtl_ast.ipynb": [NOT_IMPLEMENTED],
+    "4.2_firrtl_ast_traversal.ipynb": [NOT_IMPLEMENTED],
+    "4.3_firrtl_common_idioms.ipynb": [NOT_IMPLEMENTED],
+    "4.4_firrtl_add_ops_per_module.ipynb": [NOT_IMPLEMENTED],
 }
 
 if __name__ == "__main__":
-    notebooks_to_run: List[str] = []
     if len(sys.argv) > 1:
-        if sys.argv[1] == "--help":
-            print("Usage: {} [notebook_name.ipynb] [notebook_name_2.ipynb] [...]".format(sys.argv[0]))
-            print("By default, check all notebooks if notebooks are not specified.")
+        if sys.argv[1] in ("--help", "-h"):
+            print(__doc__)
             sys.exit(0)
-        else:
-            notebooks_to_run = sys.argv[1:]
+        notebooks_to_run = sys.argv[1:]
     else:
         notebooks_to_run = sorted(notebooks)  # all notebooks
+    failed = False
+    notebooks_to_run = [os.path.basename(n) for n in notebooks_to_run]
+    unknown = [n for n in notebooks_to_run if n not in notebooks]
+    if unknown:
+        print("Unknown notebook(s): " + ", ".join(unknown), file=sys.stderr)
+        sys.exit(2)
     for n in notebooks_to_run:
-        expected = notebooks[n]
-        nb, errors = _notebook_run(n)
-        assert check_errors(n, expected, errors)
+        print(f"Running {n} ...", flush=True)
+        actual = _notebook_run(os.path.join(ROOT, n))
+        if not check_errors(n, notebooks[n], actual):
+            failed = True
+    sys.exit(1 if failed else 0)

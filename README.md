@@ -10,9 +10,9 @@ It teaches you Scala along the way, and it frames the learning of Chisel on the 
 
 - Why hardware designs are better expressed as generators, not instances
 - Basics and some advanced features of Scala, a modern programming language
-- Basics and some advanced features of Chisel, a hardware description language embedded in Scala
-- How to write unit tests for Chisel designs
-- Basic introduction to some useful features in Chisel libraries, including [dsptools](https://github.com/ucb-bar/dsptools/) and [rocketchip](https://github.com/freechipsproject/rocket-chip).
+- Basics and some advanced features of [Chisel 7](https://github.com/chipsalliance/chisel), a hardware description language embedded in Scala
+- How to write unit tests for Chisel designs with ChiselSim and Verilator
+- How Chisel designs are compiled to SystemVerilog with CIRCT's `firtool`, and how to read the FIRRTL in between
 
 ## Prerequisites
 
@@ -24,7 +24,7 @@ It teaches you Scala along the way, and it frames the learning of Chisel on the 
 
 ### Quick Start with Docker
 
-The fastest way to get started is using the prebuilt Docker image that supports both x86-64 and Arm64:
+The fastest way to get started is using the prebuilt Docker image that supports both x86-64 and Arm64 (there is no native Linux/Arm64 build of CIRCT's `firtool`, so on Arm64 it runs under qemu-user emulation; everything else is native):
 
 Using Docker:
 ```bash
@@ -52,7 +52,8 @@ It teaches you enough to start writing Chisel, but many more Scala concepts are 
 Chisel is introduced in *Module 2*, starting with a hardware example and breaking it down.
 The rest of *Module 2* covers combinational and sequential logic, as well as software and hardware control flow.
 *Module 3* teaches you how to write hardware generators in Chisel that take advantage of Scala's high-level programming language features.
-By the end, you will be able to read and understand most of the [Chisel code base](https://github.com/freechipsproject/chisel3) and begin using [Rocket Chip](https://github.com/freechipsproject/rocket-chip).
+*Module 4* looks under the hood: the FIRRTL that Chisel emits, how CIRCT's `firtool` turns it into SystemVerilog, and how to write small programs that analyze and transform FIRRTL.
+By the end, you will be able to read and understand most of the [Chisel code base](https://github.com/chipsalliance/chisel) and begin using [Rocket Chip](https://github.com/chipsalliance/rocket-chip).
 This tutorial *does not* yet cover SBT, build systems, backend flows for FPGA or ASIC processes, or analog circuits.
 
 ## Motivation

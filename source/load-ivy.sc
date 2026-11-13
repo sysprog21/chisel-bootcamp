@@ -1,324 +1,256 @@
-interp.repositories() ::: List(
-  coursierapi.MavenRepository.of("https://oss.sonatype.org/content/repositories/snapshots")
-)
+// Chisel 7 requires Scala 2.13 (the Almond kernel is 2.13.18) and the compiler plugin.
+// The plugin must be loaded first, with its full Scala version (":::").
+import $plugin.$ivy.`org.chipsalliance:::chisel-plugin:7.16.0`
 
-@
-
-// Chisel 3.6+ requires the compiler plugin
-import $plugin.$ivy.`edu.berkeley.cs:::chisel3-plugin:3.6.+`
-
-interp.configureCompiler(x => x.settings.source.value = scala.tools.nsc.settings.ScalaVersion("2.12.10"))
+// * Anonymous `new Bundle { ... }` port lists use structural types, which Scala 2.13
+//   only accepts with the reflectiveCalls language feature.
+// * Chisel 7's dependencies put Scala 3 (TASTy) classes on the classpath; without
+//   -Ytasty-reader, e.g. `import scala.util.Random` fails with "Missing dependency ... TASTy".
+interp.configureCompiler(_.settings.processArguments(List("-language:reflectiveCalls", "-Ytasty-reader"), processAll = true))
 
 // Uncomment and change to use proxy
 // System.setProperty("https.proxyHost", "proxy.example.com")
 // System.setProperty("https.proxyPort", "3128")
 
-import $ivy.`edu.berkeley.cs::chisel3:3.6.+`
-import $ivy.`edu.berkeley.cs::chisel-iotesters:2.5.+`
-import $ivy.`edu.berkeley.cs::chiseltest:0.6.+`
-import $ivy.`edu.berkeley.cs::dsptools:1.5.+`
-import $ivy.`org.scalanlp::breeze:1.0`
-import $ivy.`edu.berkeley.cs::rocket-dsptools:1.2.0`
+import $ivy.`org.chipsalliance::chisel:7.16.0`
+import $ivy.`org.scalatest::scalatest:3.2.19`
 
-// firrtl-diagrammer removed due to json4s compatibility issues with Chisel 3.6
-// Visualization functions below provide alternative output
+// Chisel 7 emits SystemVerilog through CIRCT's `firtool`. Chisel downloads a matching
+// firtool automatically (the `llvm-firtool` artifact) on first use. Simulation with
+// ChiselSim (chisel3.simulator) additionally needs Verilator 5.x and a C++ toolchain.
 
-import $ivy.`org.scalatest::scalatest:3.2.2`
-
-// Convenience function to invoke Chisel and grab emitted Verilog.
-// Note: emitVerilog has json4s compatibility issues, using FIRRTL as fallback
-def getVerilog(dut: => chisel3.Module): String = {
-  import chisel3.stage.ChiselStage
-  try {
-    (new ChiselStage).emitVerilog(dut)
-  } catch {
-    case e: NoSuchMethodError if e.getMessage.contains("json4s") =>
-      println("Warning: Verilog generation has json4s compatibility issues, using FIRRTL")
-      (new ChiselStage).emitChirrtl(dut)
-    case e: Exception =>
+// Almond 0.14.5 cannot report an exception whose stack trace Ammonite has trimmed to "..."
+// frames: the cell then never finishes. That happens to errors raised while Chisel
+// elaborates a module (e.g. a `???` exercise inside `new MyModule`). `scrub` drops the
+// (uninteresting) stack traces of such exceptions so that the error message is shown.
+def scrub[T](body: => T): T =
+  try body
+  catch {
+    // not the fatal ones (as `scala.util.control.NonFatal`, which this file cannot import before
+    // `-Ytasty-reader` is set): `???` is a NotImplementedError, an `Error`, so it must be caught
+    case e: Throwable if !(e.isInstanceOf[VirtualMachineError] || e.isInstanceOf[LinkageError] ||
+                           e.isInstanceOf[InterruptedException]) =>
+      var t: Throwable = e
+      while (t != null) { t.setStackTrace(Array.empty); t = t.getCause }
       throw e
   }
-}
+
+// Convenience function to invoke Chisel and grab emitted SystemVerilog.
+def getVerilog(dut: => chisel3.RawModule): String =
+  scrub(circt.stage.ChiselStage.emitSystemVerilog(dut))
 
 // Convenience function to invoke Chisel and grab emitted FIRRTL.
-def getFirrtl(dut: => chisel3.Module): String = {
-  import chisel3.stage.ChiselStage
-  (new ChiselStage).emitChirrtl(dut)
+def getFirrtl(dut: => chisel3.RawModule): String =
+  scrub(circt.stage.ChiselStage.emitCHIRRTL(dut))
+
+// ChiselSim's `EphemeralSimulator.simulate`: elaborates `module`, compiles it with Verilator and
+// runs `body` against it. Two differences, so that the notebooks stay short:
+//  * errors go through `scrub`;
+//  * a `Module` is reset for one clock cycle before `body` runs, like chiseltest's `test`
+//    did. (ChiselSim itself leaves the reset to you: until it is asserted, registers hold
+//    random values.)
+// The `poke`/`peek`/`expect` methods come from `import chisel3.simulator.PeekPokeAPI._`.
+def simulate[T <: chisel3.RawModule](module: => T)(body: T => Unit): Unit = {
+  import chisel3.fromBooleanToLiteral
+  import chisel3.simulator.PeekPokeAPI._
+  scrub(chisel3.simulator.EphemeralSimulator.simulate(module) { dut =>
+    dut match {
+      case m: chisel3.Module =>
+        m.reset.poke(true.B)
+        m.clock.step(1)
+        m.reset.poke(false.B)
+      case _ =>
+    }
+    body(dut)
+  })
 }
 
-def compileFIRRTL(
-    inputFirrtl: String,
-    compiler: firrtl.Compiler,
-    customTransforms: Seq[firrtl.Transform] = Seq.empty,
-    infoMode: firrtl.Parser.InfoMode = firrtl.Parser.IgnoreInfo,
-    annotations: firrtl.AnnotationSeq = firrtl.AnnotationSeq(Seq.empty)
-): String = {
-  import firrtl.{Compiler, AnnotationSeq, CircuitState, ChirrtlForm, FIRRTLException}
-  import firrtl.Parser._
-  import scala.io.Source
-  import scala.util.control.ControlThrowable
-  import firrtl.passes._
-  val outputBuffer = new java.io.CharArrayWriter
-  try {
-      //val parsedInput = firrtl.Parser.parse(Source.fromFile(input).getLines(), infoMode)
-      val parsedInput = firrtl.Parser.parse(inputFirrtl.split("\n").toIterator, infoMode)
-      compiler.compile(
-         CircuitState(parsedInput, ChirrtlForm, annotations),
-         outputBuffer,
-         customTransforms)
-  }
+// Visualization: turn the FIRRTL emitted by Chisel into a Graphviz graph.
+// FIRRTL (spec 4.x, as emitted by Chisel 7) is line-oriented text, so a few regular
+// expressions are enough to recover ports, registers, wires, nodes and connections.
+def firrtlToDot(firrtlString: String): String = {
+  val lines = firrtlString.split("\n").map(_.replaceAll("@\\[.*\\]", ""))
 
-  catch {
-    // Rethrow the exceptions which are expected or due to the runtime environment (out of memory, stack overflow)
-    case p: ControlThrowable => throw p
-    case p: PassException  => throw p
-    case p: FIRRTLException => throw p
-     // Treat remaining exceptions as internal errors.
-       case e: Exception => firrtl.Utils.throwInternalError(exception = Some(e))
-  }
+  def sanitize(name: String): String = name.replaceAll("\\[([A-Za-z0-9_.]+)\\]", "_$1").replaceAll("[^a-zA-Z0-9_]", "_")
+  // A (possibly sub-field / sub-index) reference, e.g. `io.in` or `zs[1]`.
+  // Names directly followed by `(` are primitive operations (`add(a, b)`), not signals.
+  val ident = "[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*|\\[[A-Za-z_][A-Za-z0-9_.]*\\]|\\[[0-9]+\\])*(?![A-Za-z0-9_(])".r
+  val literal = "(?:UInt|SInt)(?:<[0-9]+>)?\\([^)]*\\)".r // e.g. UInt<1>(0h1)
+  val primOp = "^([a-z0-9_]+)\\(.*".r // e.g. add(a, b)
 
-  val outputString = outputBuffer.toString
-  outputString
-}
+  val declPort = "^(input|output) ([A-Za-z0-9_]+) : (.*)".r
+  val declReg  = "^(?:reg|regreset) ([A-Za-z0-9_]+) :.*".r
+  val declNode = "^node ([A-Za-z0-9_]+) = (.*)".r
+  val connect  = "^connect ([^,]+), (.*)".r
 
-def stringifyAST(firrtlAST: firrtl.ir.Circuit): String = {
-  var ntabs = 0
-  val buf = new StringBuilder
-  val string = firrtlAST.toString
-  string.zipWithIndex.foreach { case (c, idx) =>
-    c match {
-      case ' ' =>
-      case '(' =>
-        ntabs += 1
-        buf ++= "(\n" + "| " * ntabs
-      case ')' =>
-        ntabs -= 1
-        buf ++= "\n" + "| " * ntabs + ")"
-      case ','=> buf ++= ",\n" + "| " * ntabs
-      case  c if idx > 0 && string(idx-1)==')' =>
-        buf ++= "\n" + "| " * ntabs + c
-      case c => buf += c
+  val inputs  = scala.collection.mutable.LinkedHashSet[String]()
+  val outputs = scala.collection.mutable.LinkedHashSet[String]()
+  val regs    = scala.collection.mutable.LinkedHashSet[String]()
+  val edges   = scala.collection.mutable.LinkedHashSet[(String, String)]()
+  val opLabel = scala.collection.mutable.LinkedHashMap[String, String]()
+  val circuit = "^circuit ([A-Za-z0-9_]+) :.*".r
+  val module = "^(?:public )?(?:module|extmodule) ([A-Za-z0-9_]+) :.*".r
+  val top = lines.iterator.map(_.trim).collectFirst { case circuit(n) => n }
+    .getOrElse(throw new IllegalArgumentException("FIRRTL circuit name is missing"))
+  val controls = scala.collection.mutable.LinkedHashSet[(String, String)]()
+  val instance = "^inst ([A-Za-z0-9_]+) of ([A-Za-z0-9_]+).*".r
+  val moduleLines = scala.collection.mutable.LinkedHashMap[String, scala.collection.mutable.ArrayBuffer[String]]()
+  var currentModule: Option[String] = None
+  lines.foreach { raw =>
+    raw.trim match {
+      case module(name) =>
+        currentModule = Some(name)
+        moduleLines.getOrElseUpdate(name, scala.collection.mutable.ArrayBuffer[String]())
+      case _ => currentModule.foreach(n => moduleLines(n) += raw)
     }
   }
-  buf.toString
-}
 
-// Visualization functions - graphical SVG generation using graphviz
-def visualize(gen: () => chisel3.RawModule): Unit = {
-    import chisel3._
-    import chisel3.stage.ChiselGeneratorAnnotation
-    import chisel3.stage.phases.{Elaborate, Convert}
-    import firrtl.stage.FirrtlCircuitAnnotation
-    import sys.process._
-    import java.io.{File, PrintWriter}
-    import almond.interpreter.api.DisplayData
-    import almond.api.helpers.Display
-
-    // Step 1: Elaborate and convert to FIRRTL
-    val elaboratePhase = new Elaborate
-    val elaborated = elaboratePhase.transform(Seq(ChiselGeneratorAnnotation(gen)))
-
-    val convertPhase = new Convert
-    val converted = convertPhase.transform(elaborated)
-
-    val firrtlCircuit = converted.collectFirst {
-      case FirrtlCircuitAnnotation(cir) => cir
-    }.get
-
-    val firrtlString = firrtlCircuit.serialize
-
-    // Helper function to sanitize node names for DOT format
-    def sanitizeName(name: String): String = {
-      // Replace array indices with underscores and remove other invalid chars
-      name.replaceAll("\\[([0-9]+)\\]", "_$1")
-          .replaceAll("[^a-zA-Z0-9_]", "_")
-    }
-
-    // Parse FIRRTL to extract structure
-    val lines = firrtlString.split("\n")
-    val moduleName = lines.find(_.trim.startsWith("module ")).map(_.trim.split(" ")(1).replace(":", "")).getOrElse("Module")
-
-    // Collect all referenced nodes from connections (this includes array elements)
-    val referencedNodes = scala.collection.mutable.Set[String]()
-    lines.filter(_.contains("<=")).foreach { line =>
-      val parts = line.trim.split("<=").map(_.trim)
-      if (parts.length == 2) {
-        val targetRaw = parts(0).split("\\.")(0).split("\\(")(0).trim
-        val sourceRaw = parts(1).split("\\.")(0).split("\\(")(0).split(" ")(0).trim
-        referencedNodes += sanitizeName(targetRaw)
-        referencedNodes += sanitizeName(sourceRaw)
-      }
-    }
-
-    // Extract declared nodes (base names without array indices)
-    val inputs = lines.filter(_.trim.startsWith("input ")).map { l =>
-      val name = l.trim.split(" ")(1).split(":")(0).trim
-      sanitizeName(name)
-    }.toSet
-
-    val outputs = lines.filter(_.trim.startsWith("output ")).map { l =>
-      val name = l.trim.split(" ")(1).split(":")(0).trim
-      sanitizeName(name)
-    }.toSet
-
-    val regs = lines.filter(_.trim.startsWith("reg ")).map { l =>
-      val name = l.trim.split(" ")(1).split(":")(0).trim
-      sanitizeName(name)
-    }.toSet
-
-    val wires = lines.filter(_.trim.startsWith("wire ")).map { l =>
-      val name = l.trim.split(" ")(1).split(":")(0).trim
-      sanitizeName(name)
-    }.toSet
-
-    // Categorize all referenced nodes
-    val inputNodes = referencedNodes.filter { node =>
-      inputs.contains(node) || inputs.exists(i => node.startsWith(i + "_"))
-    }
-    val outputNodes = referencedNodes.filter { node =>
-      outputs.contains(node) || outputs.exists(o => node.startsWith(o + "_"))
-    }
-    val regNodes = referencedNodes.filter { node =>
-      regs.contains(node) || regs.exists(r => node.startsWith(r + "_"))
-    }
-    val wireNodes = referencedNodes.filter { node =>
-      wires.contains(node) || wires.exists(w => node.startsWith(w + "_"))
-    } -- inputNodes -- outputNodes -- regNodes
-
-    // Generate GraphViz DOT
-    val dot = new StringBuilder
-    dot ++= "digraph circuit {\n"
-    dot ++= "  rankdir=LR;\n"
-    dot ++= "  node [shape=box, style=rounded];\n\n"
-
-    // Input nodes
-    if (inputNodes.nonEmpty) {
-      dot ++= "  subgraph cluster_inputs {\n"
-      dot ++= "    label=\"Inputs\";\n"
-      dot ++= "    style=filled; color=lightblue;\n"
-      inputNodes.foreach(i => dot ++= s"    $i [shape=circle, fillcolor=lightgreen, style=filled];\n")
-      dot ++= "  }\n\n"
-    }
-
-    // Output nodes
-    if (outputNodes.nonEmpty) {
-      dot ++= "  subgraph cluster_outputs {\n"
-      dot ++= "    label=\"Outputs\";\n"
-      dot ++= "    style=filled; color=lightblue;\n"
-      outputNodes.foreach(o => dot ++= s"    $o [shape=doublecircle, fillcolor=lightcoral, style=filled];\n")
-      dot ++= "  }\n\n"
-    }
-
-    // Register nodes
-    if (regNodes.nonEmpty) {
-      dot ++= "  subgraph cluster_regs {\n"
-      dot ++= "    label=\"Registers\";\n"
-      dot ++= "    style=filled; color=lightyellow;\n"
-      regNodes.foreach { r =>
-        dot ++= s"    $r [shape=box, fillcolor=yellow, style=filled];\n"
-      }
-      dot ++= "  }\n\n"
-    }
-
-    // Wire nodes (internal signals)
-    if (wireNodes.nonEmpty) {
-      wireNodes.foreach { w =>
-        dot ++= s"  $w [shape=box, style=filled, fillcolor=lightgray];\n"
-      }
-      dot ++= "\n"
-    }
-
-    // Parse connections from FIRRTL
-    lines.filter(l => l.contains("<=") && !l.trim.startsWith("reset")).foreach { line =>
-      val parts = line.trim.split("<=").map(_.trim)
-      if (parts.length == 2) {
-        // Extract base name, handling array indices and field accesses
-        val targetRaw = parts(0).split("\\.")(0).split("\\(")(0).trim
-        val sourceRaw = parts(1).split("\\.")(0).split("\\(")(0).split(" ")(0).trim
-
-        // Sanitize array indices in both target and source
-        val target = sanitizeName(targetRaw)
-        val source = sanitizeName(sourceRaw)
-
-        // Skip constants, temporaries, self-loops, and invalid nodes
-        if (!sourceRaw.startsWith("UInt") && !sourceRaw.contains("\"") &&
-            !sourceRaw.startsWith("_") && source != target &&
-            referencedNodes.contains(source) && referencedNodes.contains(target)) {
-          dot ++= s"  $source -> $target;\n"
+  // Bundle-typed ports look like `output io : { flip in : UInt<8>, bus : { out : UInt<8> } }`.
+  // A field is an input if an even number of `flip`s (its own and its parents') applies to it.
+  val portToken = "\\{|\\}|(flip )?([A-Za-z0-9_]+) :".r
+  def addPort(dir: String, name: String, tpe: String): Unit = {
+    def add(path: String, isInput: Boolean): Unit = (if (isInput) inputs else outputs) += sanitize(path)
+    if (!tpe.startsWith("{")) add(name, dir == "input")
+    else {
+      var scopes = List((name, dir == "input"))
+      var pending = Option.empty[(String, Boolean)] // the last field, until we know if it is a leaf
+      def flush(): Unit = { pending.foreach(p => add(p._1, p._2)); pending = None }
+      portToken.findAllMatchIn(tpe).foreach { m =>
+        m.matched match {
+          case "{" => pending.foreach(p => scopes ::= p); pending = None
+          case "}" => flush(); scopes = scopes.tail
+          case _ =>
+            flush()
+            val (path, isInput) = scopes.head
+            pending = Some((path + "_" + m.group(2), isInput ^ (m.group(1) != null)))
         }
       }
     }
+  }
 
-    dot ++= "}\n"
-
-    // Write DOT file and generate SVG
-    val dotFile = File.createTempFile("circuit", ".dot")
-    val svgFile = File.createTempFile("circuit", ".svg")
-    val pw = new PrintWriter(dotFile)
-    val dotContent = dot.toString
-    pw.write(dotContent)
-    pw.close()
-
-    // Generate SVG using graphviz
-    val result = s"dot -Tsvg ${dotFile.getAbsolutePath} -o ${svgFile.getAbsolutePath}".!
-
-    if (result != 0) {
-      // Print DOT content for debugging
-      println("=== Generated DOT (debug) ===")
-      println(dotContent)
-      println("=== End DOT ===")
+  val dynamic = "\\[([A-Za-z_][A-Za-z0-9_.]*)\\]".r
+  val index = "\\[([A-Za-z_][A-Za-z0-9_.]*|[0-9]+)\\]".r
+  val fixedSelections = scala.collection.mutable.LinkedHashSet[(String, String)]()
+  val dynamicReads = scala.collection.mutable.LinkedHashSet[String]()
+  val dynamicWrites = scala.collection.mutable.LinkedHashSet[String]()
+  def visit(moduleName: String, prefix: String, ancestors: Set[String]): Unit = {
+    if (ancestors(moduleName)) throw new IllegalArgumentException("Recursive FIRRTL module: " + moduleName)
+    val body = moduleLines.getOrElse(moduleName,
+      throw new IllegalArgumentException("FIRRTL module definition is missing: " + moduleName))
+    def scoped(name: String): String = sanitize(prefix + name)
+    def reference(ref: String, write: Boolean = false): String = {
+      val selected = scoped(ref)
+      index.findAllMatchIn(ref).foreach { m =>
+        val base = scoped(ref.substring(0, m.start))
+        if (m.group(1).forall(_.isDigit)) fixedSelections += (base -> selected)
+        else if (write) dynamicWrites += base
+        else dynamicReads += base
+      }
+      dynamic.findAllMatchIn(ref).foreach { m =>
+        val base = ref.substring(0, m.start)
+        if (write) edges += (selected -> scoped(base))
+        else edges += (scoped(base) -> selected)
+        edges += (scoped(m.group(1)) -> selected)
+      }
+      selected
     }
+    def sources(expr: String): Seq[String] =
+      ident.findAllIn(literal.replaceAllIn(expr, "")).filterNot(Set("clock", "reset")).map(ref => reference(ref)).toSeq
 
-    if (result == 0 && svgFile.exists()) {
-      val svgContent = scala.io.Source.fromFile(svgFile).mkString
-      Display.html(svgContent)
-    } else {
-      println("=== Module FIRRTL (Intermediate Representation) ===")
+    var conditions = List.empty[(Int, Seq[String])]
+    var previousConditions = Map.empty[Int, Seq[String]]
+    // `expr` drives `target`, as does every enclosing `when` condition (the dashed edges)
+    def drive(expr: String, target: String): Unit = {
+      sources(expr).foreach(s => edges += (s -> target))
+      conditions.flatMap(_._2).foreach(s => controls += (s -> target))
+    }
+    body.foreach { raw =>
+      val line = raw.trim
+      val indent = raw.takeWhile(_ == ' ').length
+      if (line.nonEmpty) {
+        while (conditions.nonEmpty && conditions.head._1 >= indent) {
+          val (level, condition) = conditions.head
+          previousConditions += level -> condition
+          conditions = conditions.tail
+        }
+        if (line.startsWith("when ") && line.endsWith(" :")) {
+          val condition = sources(line.stripPrefix("when ").stripSuffix(" :"))
+          conditions = (indent -> condition) :: conditions
+          previousConditions -= indent
+        } else if (line == "else :") {
+          conditions = (indent -> previousConditions.getOrElse(indent, Seq.empty)) :: conditions
+        } else line match {
+          case instance(n, child) => visit(child, prefix + n + ".", ancestors + moduleName)
+          case declPort(dir, n, tpe) =>
+            if (prefix.isEmpty && n != "clock" && n != "reset") addPort(dir, n, tpe)
+          case declReg(n) => regs += scoped(n)
+          case declNode(n, expr) =>
+            expr match { case primOp(op) => opLabel(scoped(n)) = op; case _ => }
+            drive(expr, scoped(n))
+          case connect(dst, src) =>
+            val target = reference(dst.trim, write = true)
+            drive(src, target)
+          case _ =>
+        }
+      }
+    }
+  }
+  visit(top, "", Set.empty)
+  fixedSelections.foreach { case (base, selected) =>
+    if (dynamicWrites(base)) edges += (base -> selected)
+    if (dynamicReads(base)) edges += (selected -> base)
+  }
+
+  // Sub-fields and indices (`zs[1]`) are sanitized into `zs_1`, so they are matched with
+  // their declaration by prefix.
+  def declaredAs(node: String, set: scala.collection.Set[String]): Boolean =
+    set.exists(d => node == d || node.startsWith(d + "_"))
+
+  // Ports and registers are drawn even when only a constant drives them (so they have no edge)
+  val nodes = ((edges ++ controls).flatMap { case (a, b) => Seq(a, b) }.toSeq ++ inputs ++ outputs ++ regs).distinct
+  val dot = new StringBuilder
+  dot ++= s"digraph circuit {\n  label=\"Module: $top\";\n  rankdir=LR;\n  node [shape=box, style=\"rounded,filled\", fillcolor=lightgray];\n"
+  nodes.foreach { n =>
+    val attrs =
+      if (declaredAs(n, inputs)) "shape=circle, fillcolor=lightgreen"
+      else if (declaredAs(n, outputs)) "shape=doublecircle, fillcolor=lightcoral"
+      else if (declaredAs(n, regs)) "shape=box, fillcolor=gold"
+      else if (opLabel.contains(n)) s"""shape=ellipse, fillcolor=white, label="${opLabel(n)}${if (n.startsWith("_")) "" else "\\n" + n}""""
+      else "shape=box, fillcolor=lightgray"
+    dot ++= s"  $n [$attrs];\n"
+  }
+  def emit(es: Iterable[(String, String)], style: String): Unit =
+    es.foreach { case (a, b) => if (a != b) dot ++= s"  $a -> $b$style;\n" }
+  emit(edges, "")
+  emit(controls, " [style=dashed, label=\"condition\"]")
+  dot ++= "}\n"
+  dot.toString
+}
+
+// Draw the circuit with Graphviz (`dot`). Falls back to printing the FIRRTL without Graphviz.
+def visualize(gen: () => chisel3.RawModule): Unit = {
+  import almond.api.helpers.Display
+
+  val firrtlString = getFirrtl(gen())
+  val svg =
+    try Some(os.proc("dot", "-Tsvg").call(stdin = firrtlToDot(firrtlString), check = false)).filter(_.exitCode == 0).map(_.out.text())
+    catch { case _: java.io.IOException => None }
+  svg.filter(_.nonEmpty) match {
+    case Some(html) => Display.html(html)
+    case None =>
+      println("Graphviz (`dot`) is not available; showing the FIRRTL instead.")
       println(firrtlString)
-      println("\nNote: Graphviz not available. Install with: apt-get install graphviz")
-    }
-
-    // Cleanup
-    dotFile.delete()
-    svgFile.delete()
+  }
 }
 
 def visualizeHierarchy(gen: () => chisel3.RawModule): Unit = {
-    import chisel3._
-    import chisel3.stage.ChiselGeneratorAnnotation
-    import chisel3.stage.phases.{Elaborate, Convert}
-    import chisel3.stage.ChiselCircuitAnnotation
-    import firrtl.stage.FirrtlCircuitAnnotation
-
-    println("=== Module Hierarchy ===")
-
-    // Elaborate and convert
-    val elaboratePhase = new Elaborate
-    val elaborated = elaboratePhase.transform(Seq(ChiselGeneratorAnnotation(gen)))
-
-    val convertPhase = new Convert
-    val converted = convertPhase.transform(elaborated)
-
-    val firrtlCircuit = converted.collectFirst {
-      case FirrtlCircuitAnnotation(cir) => cir
-    }.get
-
-    val firrtlString = firrtlCircuit.serialize
-
-    // Print just the module hierarchy
-    val hierarchyLines = firrtlString.split("\n").filter(line =>
-      line.trim.startsWith("module ") ||
-      line.trim.startsWith("inst ") ||
-      line.trim.matches("^\\s+inst .*")
-    )
-
-    if (hierarchyLines.nonEmpty) {
-      hierarchyLines.foreach(println)
-    } else {
-      println("(No submodule instances found)")
-    }
-
-    println("\n=== Full FIRRTL ===")
-    println(firrtlString)
+  val firrtlString = getFirrtl(gen())
+  println("=== Module Hierarchy ===")
+  val hierarchy = firrtlString.split("\n").filter { l =>
+    val t = l.trim
+    t.startsWith("module ") || t.startsWith("public module ") || t.startsWith("inst ")
+  }
+  if (hierarchy.nonEmpty) hierarchy.foreach(println) else println("(No submodule instances found)")
+  println("\n=== Full FIRRTL ===")
+  println(firrtlString)
 }
-

@@ -1,10 +1,18 @@
 # First stage : setup the system and environment
 FROM alpine:3.22 AS base
 
+ARG TARGETARCH
+
 # Install OpenJDK 17 and runtime dependencies.
 # Chisel 7 simulates with ChiselSim, which drives Verilator, so a C++ toolchain
 # (g++, make, musl-dev) and Perl (Verilator is a Perl script) are runtime dependencies.
+# Stable Alpine ships Verilator for x86-64 only, so both architectures take it from the
+# edge/community repository; the @edge tag keeps every other package on 3.22. Later apk
+# calls need --no-cache (or a fresh index) so that the @edge tag still resolves.
+# On Arm64, firtool (an x86-64 executable, see the intermediate-builder stage) runs
+# through qemu-user.
 RUN \
+    echo "@edge https://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories && \
     apk add --no-cache \
         openjdk17-jre-headless \
         graphviz \
@@ -12,13 +20,14 @@ RUN \
         py3-pip \
         bash \
         libstdc++ \
-        verilator \
-        verilator-dev \
+        verilator@edge \
+        verilator-dev@edge \
         g++ \
         make \
         musl-dev \
         perl \
         && \
+    if [ "$TARGETARCH" = "arm64" ]; then apk add --no-cache qemu-x86_64; fi && \
     apk add --no-cache --virtual .build-deps \
         gcc \
         linux-headers \
@@ -32,7 +41,7 @@ RUN \
     find /usr/lib/python3.12/site-packages -type d -name tests -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/lib/python3.12/site-packages -type d -name testing -exec rm -rf {} + 2>/dev/null || true && \
     rm -rf /usr/lib/python3.12/site-packages/pip /usr/lib/python3.12/site-packages/setuptools && \
-    apk del .build-deps
+    apk del --no-cache .build-deps
 
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
 ENV PATH=$JAVA_HOME/bin:$PATH
@@ -98,7 +107,7 @@ RUN \
 # Chisel 7 emits SystemVerilog by running CIRCT's `firtool`, a self-contained static x86-64
 # executable (Maven Central ships it inside the llvm-firtool jar). Install it once here so
 # the bootcamp works offline. There is no native Linux/Arm64 build of firtool: on Arm64 it
-# runs through qemu-user (the rest of the toolchain, including Verilator, is native).
+# runs through qemu-user, installed in the base stage (the rest of the toolchain is native).
 RUN \
     mkdir -p /opt/firtool/bin && \
     curl -fL --retry 3 -o firtool.jar \
@@ -107,7 +116,6 @@ RUN \
     rm firtool.jar && \
     chmod +x /opt/firtool/bin/firtool.x86_64 && \
     if [ "$TARGETARCH" = "arm64" ]; then \
-        apk add --no-cache qemu-x86_64 && \
         printf '#!/bin/sh\nexec qemu-x86_64 /opt/firtool/bin/firtool.x86_64 "$@"\n' > /opt/firtool/bin/firtool && \
         chmod +x /opt/firtool/bin/firtool; \
     else \
@@ -116,12 +124,6 @@ RUN \
 
 # Last stage
 FROM base AS final
-
-ARG TARGETARCH
-
-# On Arm64 firtool (an x86-64 executable) runs through qemu-user, see above
-RUN if [ "$TARGETARCH" = "arm64" ]; then apk add --no-cache qemu-x86_64; fi
-
 
 # Tell Chisel where to find the preinstalled firtool instead of downloading one
 ENV CHISEL_FIRTOOL_PATH=/opt/firtool/bin

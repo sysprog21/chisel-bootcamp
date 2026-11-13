@@ -8,6 +8,7 @@ Rules:
   removed-api no removed Chisel 3 APIs, except deliberate mentions in markdown cells listed
               in tests/lint-allowlist.txt
   registered  every notebook is in `notebooks` of runtest.py, and every entry there exists
+  outline     every notebook is in the README's outline table, with an estimated time
 
 Usage: tests/test_notebooks.py [--self-test]
   --self-test seeds one violation per rule into a copy of the notebooks and checks that each
@@ -149,15 +150,36 @@ def check_removed_apis(root):
     return errors
 
 
+def notebook_names(root):
+    return sorted(os.path.basename(p) for p in glob.glob(os.path.join(root, "*.ipynb")))
+
+
 def check_registered(root):
     spec = importlib.util.spec_from_file_location("runtest", os.path.join(root, "runtest.py"))
     runtest = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(runtest)
     registered = set(runtest.notebooks)
-    present = {os.path.basename(p) for p in glob.glob(os.path.join(root, "*.ipynb"))}
+    present = set(notebook_names(root))
     return [f"{n}: not registered in `notebooks` of runtest.py" for n in sorted(present - registered)] + [
         f"runtest.py: {n} is registered but does not exist" for n in sorted(registered - present)
     ]
+
+
+# a row of the outline table: | [name](name.ipynb) | topic | N min |
+OUTLINE_ROW = re.compile(r"\| \[[^]]+\]\(([^)]+\.ipynb)\) \|.*\| \d+ min \|\s*$")
+
+
+def check_outline(root):
+    with open(os.path.join(root, "README.md"), encoding="utf-8") as f:
+        readme = f.read()
+    outline = readme.partition("\n## Outline\n")[2].partition("\n## ")[0]
+    timed = {m.group(1) for m in map(OUTLINE_ROW.match, outline.splitlines()) if m}
+    present = notebook_names(root)
+    return [
+        f"README.md: {n} is not in the outline table as '| [{n[:-6]}]({n}) | topic | N min |'"
+        for n in present
+        if n not in timed
+    ] + [f"README.md: the outline table lists {n}, which does not exist" for n in sorted(timed - set(present))]
 
 
 RULES = {
@@ -166,6 +188,7 @@ RULES = {
     "alt-text": check_alt_text,
     "removed-api": check_removed_apis,
     "registered": check_registered,
+    "outline": check_outline,
 }
 
 
@@ -195,6 +218,7 @@ SEEDS = {
     "alt-text": _append("![](images/chisel_1024.png)"),
     "removed-api": _append("`import chisel3.iotesters.{PeekPokeTester, Driver}`"),
     "registered": lambda r: shutil.copy(os.path.join(r, "0_demo.ipynb"), os.path.join(r, "9_unregistered.ipynb")),
+    "outline": lambda r: shutil.copy(os.path.join(r, "0_demo.ipynb"), os.path.join(r, "9_not_outlined.ipynb")),
 }
 
 
@@ -202,7 +226,9 @@ def self_test():
     ok = True
     for rule, seed in SEEDS.items():
         with tempfile.TemporaryDirectory() as tmp:
-            for p in glob.glob(os.path.join(ROOT, "*.ipynb")) + [os.path.join(ROOT, "runtest.py")]:
+            for p in glob.glob(os.path.join(ROOT, "*.ipynb")) + [
+                os.path.join(ROOT, f) for f in ("runtest.py", "README.md")
+            ]:
                 shutil.copy(p, tmp)
             shutil.copytree(os.path.join(ROOT, "images"), os.path.join(tmp, "images"))
             os.makedirs(os.path.join(tmp, "tests"))

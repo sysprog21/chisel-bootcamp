@@ -53,13 +53,14 @@ jobs:
             python3 runtest.py 0_demo.ipynb 2.1_first_module.ipynb 2.6_chiselsim.ipynb 4.1_firrtl_ast.ipynb
           docker run --rm --network none chisel-bootcamp:test python3 tests/test_visualizer.py
 
-      - name: Build and push
-        if: github.event_name == 'push'
+      # Build every platform on pull requests too, so a platform-specific break (such as a
+      # package missing for Arm64) fails before merge; only a push to dev publishes.
+      - name: Build all platforms (push only on push)
         uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: true
+          push: ${{ github.event_name == 'push' }}
           tags: sysprog21/chisel-bootcamp:latest
           cache-from: type=gha,scope=build
           cache-to: type=gha,mode=max,scope=build

@@ -1,0 +1,7 @@
+# Notebooks are committed without outputs or execution counts (see CONTRIBUTING.md).
+# Install once with `pip install pre-commit && pre-commit install`.
+repos:
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.9.1
+    hooks:
+      - id: nbstripout

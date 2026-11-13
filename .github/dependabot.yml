@@ -1,3 +1,5 @@
+# Versions that Dependabot cannot see (the Dockerfile ENVs, `source/load-ivy.sc`, `binder/postBuild`,
+# `Install.md` and `README.md`) are kept in agreement by `tools/check-versions.py` instead.
 version: 2
 updates:
   # Keep the GitHub Actions used by the workflows current

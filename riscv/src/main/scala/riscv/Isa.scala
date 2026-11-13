@@ -84,6 +84,14 @@ object Instructions {
     all.collect { case (name, p) if p.cover(w) => name }
   }
 
+  /** A random instance of instruction `name` (as in `all`): its pattern's fixed bits, and random
+    * bits wherever the pattern does not care (registers, immediates).
+    */
+  def random(name: String, rnd: scala.util.Random): Long = {
+    val pattern = all.find(_._1 == name).getOrElse(throw new IllegalArgumentException(s"no instruction $name"))._2
+    (rnd.nextLong() & ~pattern.mask.toLong | pattern.value.toLong) & 0xffffffffL
+  }
+
   /** All 40 RV32I instructions (FENCE.I belongs to Zifencei, not RV32I). */
   val all: Seq[(String, BitPat)] = Seq(
     "LUI"    -> LUI,

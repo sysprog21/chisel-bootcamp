@@ -14,6 +14,28 @@ pre-commit run --all-files    # check (and fix) every file now
 
 CI runs the same hook and fails if it would change a notebook.
 
+## Code style
+
+- **Python:** [black](https://black.readthedocs.io/) with the settings in `pyproject.toml`.
+- **Shell:** [shfmt](https://github.com/mvdan/sh) with 4-space indentation (`shfmt -i 4`).
+- **Scala:** [scalafmt](https://scalameta.org/scalafmt/) with `.scalafmt.conf`, for
+  `source/*.sc` and the code cells of the notebooks.
+
+The pre-commit hooks above run black and shfmt. scalafmt needs a separate binary (download the
+version named in `.scalafmt.conf` from its releases, or `cs install scalafmt`); then
+
+```bash
+python3 tools/format-scala.py          # formats source/*.sc and every notebook's Scala cells
+python3 tools/format-scala.py --check  # what CI runs
+```
+
+`tools/format-scala.py` leaves alone the cells that scalafmt cannot parse, such as a deliberate
+syntax error (see its docstring). CI checks all three styles.
+
+Out of scope: the shell commands inside the `Dockerfile` and the workflow `run:` steps. The formatter versions are pinned in `.pre-commit-config.yaml`
+and `.scalafmt.conf`; bump them by hand (`pre-commit autoupdate` for the hooks; a new scalafmt
+version also needs its checksum in `.github/workflows/checks.yml`).
+
 ## Checks you can run without a kernel
 
 ```bash
@@ -56,4 +78,5 @@ cell of their own to see the details.
 2. Link it from the previous notebook's Prev/Next links (and link back to the previous one
    from the new notebook), and add it to the outline in `README.md`.
 3. Give every image non-empty alt text.
-4. Run the checks above and `runtest.py` on the new notebook.
+4. Format its Scala cells (`tools/format-scala.py`), then run the checks above and
+   `runtest.py` on the new notebook.

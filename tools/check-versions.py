@@ -11,6 +11,7 @@ Usage: tools/check-versions.py            check every version
 
 The Chisel sources jar is looked up in the coursier caches, otherwise downloaded from Maven Central.
 """
+
 import argparse
 import io
 import os
@@ -63,8 +64,7 @@ def collect():
             with open(os.path.join(ROOT, path), encoding="utf-8") as f:
                 files[path] = f.read().splitlines()
         lines = files[path]
-        hits = [(path, n, m.group(1)) for n, line in enumerate(lines, 1)
-                for m in re.finditer(pattern, line)]
+        hits = [(path, n, m.group(1)) for n, line in enumerate(lines, 1) for m in re.finditer(pattern, line)]
         if not hits:
             missing.append(f"{path}: no match for {key} ({pattern})")
         found.setdefault(key, []).extend(hits)
@@ -75,8 +75,9 @@ def chisel_firtool_version(chisel_version):
     """:returns the firtool version in chisel3.BuildInfo, read from the Chisel sources jar."""
     rel = CHISEL_SOURCES.format(v=chisel_version)
     caches = [os.environ.get("COURSIER_CACHE"), os.path.expanduser("~/.cache/coursier/v1"), "/coursier_cache"]
-    cached = [p for p in (os.path.join(d, "https/repo1.maven.org/maven2", rel) for d in caches if d)
-              if os.path.isfile(p)]
+    cached = [
+        p for p in (os.path.join(d, "https/repo1.maven.org/maven2", rel) for d in caches if d) if os.path.isfile(p)
+    ]
     if cached:
         with open(cached[0], "rb") as f:
             data = f.read()
@@ -108,13 +109,18 @@ def main():
         print(reference[args.print])
         return 0
     for key, hits in found.items():
-        errors += [f"{path}:{line}: {key} {version}, but {REFERENCE_FILE} has {reference[key]}"
-                   for path, line, version in hits if version != reference[key]]
+        errors += [
+            f"{path}:{line}: {key} {version}, but {REFERENCE_FILE} has {reference[key]}"
+            for path, line, version in hits
+            if version != reference[key]
+        ]
 
     expected = chisel_firtool_version(reference["chisel"])
     if expected != reference["firtool"]:
-        errors.append(f"{REFERENCE_FILE}: FIRTOOL_VERSION {reference['firtool']}, but Chisel "
-                      f"{reference['chisel']} was published against firtool {expected}")
+        errors.append(
+            f"{REFERENCE_FILE}: FIRTOOL_VERSION {reference['firtool']}, but Chisel "
+            f"{reference['chisel']} was published against firtool {expected}"
+        )
 
     if errors:
         print("\n".join(errors), file=sys.stderr)

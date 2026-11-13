@@ -9,7 +9,9 @@ import $plugin.$ivy.`org.chipsalliance:::chisel-plugin:7.16.0`
 // * Deprecations: the kernel prints a warning that names each deprecated call in a cell, and
 //   runtest.py fails on it. Code in this file only gets a summary line ("1 deprecation ...;
 //   re-run enabling -deprecation for details"), and adding -deprecation here changes nothing.
-interp.configureCompiler(_.settings.processArguments(List("-language:reflectiveCalls", "-Ytasty-reader"), processAll = true))
+interp.configureCompiler(
+  _.settings.processArguments(List("-language:reflectiveCalls", "-Ytasty-reader"), processAll = true)
+)
 
 // Uncomment and change to use proxy
 // System.setProperty("https.proxyHost", "proxy.example.com")
@@ -31,8 +33,9 @@ def scrub[T](body: => T): T =
   catch {
     // not the fatal ones (as `scala.util.control.NonFatal`, which this file cannot import before
     // `-Ytasty-reader` is set): `???` is a NotImplementedError, an `Error`, so it must be caught
-    case e: Throwable if !(e.isInstanceOf[VirtualMachineError] || e.isInstanceOf[LinkageError] ||
-                           e.isInstanceOf[InterruptedException]) =>
+    case e: Throwable
+        if !(e.isInstanceOf[VirtualMachineError] || e.isInstanceOf[LinkageError] ||
+          e.isInstanceOf[InterruptedException]) =>
       var t: Throwable = e
       while (t != null) { t.setStackTrace(Array.empty); t = t.getCause }
       throw e
@@ -59,9 +62,9 @@ def getFirrtl(dut: => chisel3.RawModule): String =
 //    the simulation, unlike the temporary directory used otherwise) and prints its path.
 // The `poke`/`peek`/`expect` methods come from `import chisel3.simulator.PeekPokeAPI._`.
 def simulate[T <: chisel3.RawModule](
-  module:        => T,
-  randomization: chisel3.simulator.Randomization = chisel3.simulator.Randomization.random,
-  waves:         String = ""
+    module: => T,
+    randomization: chisel3.simulator.Randomization = chisel3.simulator.Randomization.random,
+    waves: String = ""
 )(body: T => Unit): Unit = {
   import chisel3.fromBooleanToLiteral
   import chisel3.simulator.PeekPokeAPI._
@@ -81,21 +84,24 @@ def simulate[T <: chisel3.RawModule](
     case s => s
   }
   val settings =
-    Settings.defaultRaw[T].copy(
-      verilogLayers = LayerControl.EnableAll,
-      randomization = randomization,
-      enableWavesAtTimeZero = waveDir.nonEmpty
-    )
-  try scrub(new ChiselSim {}.simulateRaw(module, settings = settings) { dut =>
-    dut match {
-      case m: chisel3.Module =>
-        m.reset.poke(true.B)
-        m.clock.step(1)
-        m.reset.poke(false.B)
-      case _ =>
-    }
-    body(dut)
-  })
+    Settings
+      .defaultRaw[T]
+      .copy(
+        verilogLayers = LayerControl.EnableAll,
+        randomization = randomization,
+        enableWavesAtTimeZero = waveDir.nonEmpty
+      )
+  try
+    scrub(new ChiselSim {}.simulateRaw(module, settings = settings) { dut =>
+      dut match {
+        case m: chisel3.Module =>
+          m.reset.poke(true.B)
+          m.clock.step(1)
+          m.reset.poke(false.B)
+        case _ =>
+      }
+      body(dut)
+    })
   finally // also when the test fails, which is when the waves are most useful
     if (waves.nonEmpty) wavesFile(waves).foreach(vcd => println(s"Waveform: $vcd"))
 }
@@ -113,7 +119,7 @@ def wavesFile(name: String): Option[os.Path] = {
 // skip an uninteresting start-up phase. (Without `waves`, the simulation has no trace support and
 // these fail.)
 object waveControl extends chisel3.simulator.ControlAPI // Chisel has no ControlAPI object to import
-def enableWaves(): Unit = waveControl.enableWaves()
+def enableWaves(): Unit  = waveControl.enableWaves()
 def disableWaves(): Unit = waveControl.disableWaves()
 
 // Visualization: turn the FIRRTL emitted by Chisel into a Graphviz graph.
@@ -125,9 +131,10 @@ def firrtlToDot(firrtlString: String): String = {
   def sanitize(name: String): String = name.replaceAll("\\[([A-Za-z0-9_.]+)\\]", "_$1").replaceAll("[^a-zA-Z0-9_]", "_")
   // A (possibly sub-field / sub-index) reference, e.g. `io.in` or `zs[1]`.
   // Names directly followed by `(` are primitive operations (`add(a, b)`), not signals.
-  val ident = "[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*|\\[[A-Za-z_][A-Za-z0-9_.]*\\]|\\[[0-9]+\\])*(?![A-Za-z0-9_(])".r
+  val ident =
+    "[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*|\\[[A-Za-z_][A-Za-z0-9_.]*\\]|\\[[0-9]+\\])*(?![A-Za-z0-9_(])".r
   val literal = "(?:UInt|SInt)(?:<[0-9]+>)?\\([^)]*\\)".r // e.g. UInt<1>(0h1)
-  val primOp = "^([a-z0-9_]+)\\(.*".r // e.g. add(a, b)
+  val primOp  = "^([a-z0-9_]+)\\(.*".r                    // e.g. add(a, b)
 
   val declPort = "^(input|output) ([A-Za-z0-9_]+) : (.*)".r
   val declReg  = "^(?:reg|regreset) ([A-Za-z0-9_]+) :.*".r
@@ -140,11 +147,13 @@ def firrtlToDot(firrtlString: String): String = {
   val edges   = scala.collection.mutable.LinkedHashSet[(String, String)]()
   val opLabel = scala.collection.mutable.LinkedHashMap[String, String]()
   val circuit = "^circuit ([A-Za-z0-9_]+) :.*".r
-  val module = "^(?:public )?(?:module|extmodule) ([A-Za-z0-9_]+) :.*".r
-  val top = lines.iterator.map(_.trim).collectFirst { case circuit(n) => n }
+  val module  = "^(?:public )?(?:module|extmodule) ([A-Za-z0-9_]+) :.*".r
+  val top     = lines.iterator
+    .map(_.trim)
+    .collectFirst { case circuit(n) => n }
     .getOrElse(throw new IllegalArgumentException("FIRRTL circuit name is missing"))
-  val controls = scala.collection.mutable.LinkedHashSet[(String, String)]()
-  val instance = "^inst ([A-Za-z0-9_]+) of ([A-Za-z0-9_]+).*".r
+  val controls    = scala.collection.mutable.LinkedHashSet[(String, String)]()
+  val instance    = "^inst ([A-Za-z0-9_]+) of ([A-Za-z0-9_]+).*".r
   val moduleLines = scala.collection.mutable.LinkedHashMap[String, scala.collection.mutable.ArrayBuffer[String]]()
   var currentModule: Option[String] = None
   lines.foreach { raw =>
@@ -158,19 +167,19 @@ def firrtlToDot(firrtlString: String): String = {
 
   // Bundle-typed ports look like `output io : { flip in : UInt<8>, bus : { out : UInt<8> } }`.
   // A field is an input if an even number of `flip`s (its own and its parents') applies to it.
-  val portToken = "\\{|\\}|(flip )?([A-Za-z0-9_]+) :".r
+  val portToken                                             = "\\{|\\}|(flip )?([A-Za-z0-9_]+) :".r
   def addPort(dir: String, name: String, tpe: String): Unit = {
     def add(path: String, isInput: Boolean): Unit = (if (isInput) inputs else outputs) += sanitize(path)
     if (!tpe.startsWith("{")) add(name, dir == "input")
     else {
-      var scopes = List((name, dir == "input"))
-      var pending = Option.empty[(String, Boolean)] // the last field, until we know if it is a leaf
+      var scopes        = List((name, dir == "input"))
+      var pending       = Option.empty[(String, Boolean)] // the last field, until we know if it is a leaf
       def flush(): Unit = { pending.foreach(p => add(p._1, p._2)); pending = None }
       portToken.findAllMatchIn(tpe).foreach { m =>
         m.matched match {
           case "{" => pending.foreach(p => scopes ::= p); pending = None
           case "}" => flush(); scopes = scopes.tail
-          case _ =>
+          case _   =>
             flush()
             val (path, isInput) = scopes.head
             pending = Some((path + "_" + m.group(2), isInput ^ (m.group(1) != null)))
@@ -179,16 +188,19 @@ def firrtlToDot(firrtlString: String): String = {
     }
   }
 
-  val dynamic = "\\[([A-Za-z_][A-Za-z0-9_.]*)\\]".r
-  val index = "\\[([A-Za-z_][A-Za-z0-9_.]*|[0-9]+)\\]".r
+  val dynamic         = "\\[([A-Za-z_][A-Za-z0-9_.]*)\\]".r
+  val index           = "\\[([A-Za-z_][A-Za-z0-9_.]*|[0-9]+)\\]".r
   val fixedSelections = scala.collection.mutable.LinkedHashSet[(String, String)]()
-  val dynamicReads = scala.collection.mutable.LinkedHashSet[String]()
-  val dynamicWrites = scala.collection.mutable.LinkedHashSet[String]()
+  val dynamicReads    = scala.collection.mutable.LinkedHashSet[String]()
+  val dynamicWrites   = scala.collection.mutable.LinkedHashSet[String]()
   def visit(moduleName: String, prefix: String, ancestors: Set[String]): Unit = {
     if (ancestors(moduleName)) throw new IllegalArgumentException("Recursive FIRRTL module: " + moduleName)
-    val body = moduleLines.getOrElse(moduleName,
-      throw new IllegalArgumentException("FIRRTL module definition is missing: " + moduleName))
+    val body = moduleLines.getOrElse(
+      moduleName,
+      throw new IllegalArgumentException("FIRRTL module definition is missing: " + moduleName)
+    )
     def scoped(name: String): String = sanitize(prefix + name)
+
     def reference(ref: String, write: Boolean = false): String = {
       val selected = scoped(ref)
       index.findAllMatchIn(ref).foreach { m =>
@@ -200,15 +212,15 @@ def firrtlToDot(firrtlString: String): String = {
       dynamic.findAllMatchIn(ref).foreach { m =>
         val base = ref.substring(0, m.start)
         if (write) edges += (selected -> scoped(base))
-        else edges += (scoped(base) -> selected)
-        edges += (scoped(m.group(1)) -> selected)
+        else edges += (scoped(base)   -> selected)
+        edges += (scoped(m.group(1))  -> selected)
       }
       selected
     }
     def sources(expr: String): Seq[String] =
       ident.findAllIn(literal.replaceAllIn(expr, "")).filterNot(Set("clock", "reset")).map(ref => reference(ref)).toSeq
 
-    var conditions = List.empty[(Int, Seq[String])]
+    var conditions         = List.empty[(Int, Seq[String])]
     var previousConditions = Map.empty[Int, Seq[String]]
     // `expr` drives `target`, as does every enclosing `when` condition (the dashed edges)
     def drive(expr: String, target: String): Unit = {
@@ -216,7 +228,7 @@ def firrtlToDot(firrtlString: String): String = {
       conditions.flatMap(_._2).foreach(s => controls += (s -> target))
     }
     body.foreach { raw =>
-      val line = raw.trim
+      val line   = raw.trim
       val indent = raw.takeWhile(_ == ' ').length
       if (line.nonEmpty) {
         while (conditions.nonEmpty && conditions.head._1 >= indent) {
@@ -230,25 +242,26 @@ def firrtlToDot(firrtlString: String): String = {
           previousConditions -= indent
         } else if (line == "else :") {
           conditions = (indent -> previousConditions.getOrElse(indent, Seq.empty)) :: conditions
-        } else line match {
-          case instance(n, child) => visit(child, prefix + n + ".", ancestors + moduleName)
-          case declPort(dir, n, tpe) =>
-            if (prefix.isEmpty && n != "clock" && n != "reset") addPort(dir, n, tpe)
-          case declReg(n) => regs += scoped(n)
-          case declNode(n, expr) =>
-            expr match { case primOp(op) => opLabel(scoped(n)) = op; case _ => }
-            drive(expr, scoped(n))
-          case connect(dst, src) =>
-            val target = reference(dst.trim, write = true)
-            drive(src, target)
-          case _ =>
-        }
+        } else
+          line match {
+            case instance(n, child)    => visit(child, prefix + n + ".", ancestors + moduleName)
+            case declPort(dir, n, tpe) =>
+              if (prefix.isEmpty && n != "clock" && n != "reset") addPort(dir, n, tpe)
+            case declReg(n)        => regs += scoped(n)
+            case declNode(n, expr) =>
+              expr match { case primOp(op) => opLabel(scoped(n)) = op; case _ => }
+              drive(expr, scoped(n))
+            case connect(dst, src) =>
+              val target = reference(dst.trim, write = true)
+              drive(src, target)
+            case _ =>
+          }
       }
     }
   }
   visit(top, "", Set.empty)
   fixedSelections.foreach { case (base, selected) =>
-    if (dynamicWrites(base)) edges += (base -> selected)
+    if (dynamicWrites(base)) edges += (base    -> selected)
     if (dynamicReads(base)) edges += (selected -> base)
   }
 
@@ -259,14 +272,15 @@ def firrtlToDot(firrtlString: String): String = {
 
   // Ports and registers are drawn even when only a constant drives them (so they have no edge)
   val nodes = ((edges ++ controls).flatMap { case (a, b) => Seq(a, b) }.toSeq ++ inputs ++ outputs ++ regs).distinct
-  val dot = new StringBuilder
+  val dot   = new StringBuilder
   dot ++= s"digraph circuit {\n  label=\"Module: $top\";\n  rankdir=LR;\n  node [shape=box, style=\"rounded,filled\", fillcolor=lightgray];\n"
   nodes.foreach { n =>
     val attrs =
       if (declaredAs(n, inputs)) "shape=circle, fillcolor=lightgreen"
       else if (declaredAs(n, outputs)) "shape=doublecircle, fillcolor=lightcoral"
       else if (declaredAs(n, regs)) "shape=box, fillcolor=gold"
-      else if (opLabel.contains(n)) s"""shape=ellipse, fillcolor=white, label="${opLabel(n)}${if (n.startsWith("_")) "" else "\\n" + n}""""
+      else if (opLabel.contains(n))
+        s"""shape=ellipse, fillcolor=white, label="${opLabel(n)}${if (n.startsWith("_")) "" else "\\n" + n}""""
       else "shape=box, fillcolor=lightgray"
     dot ++= s"  $n [$attrs];\n"
   }
@@ -281,12 +295,15 @@ def firrtlToDot(firrtlString: String): String = {
 // Draw the circuit with Graphviz (`dot`). Falls back to printing the FIRRTL without Graphviz.
 def visualize(gen: () => chisel3.RawModule): Unit = {
   val firrtlString = getFirrtl(gen())
-  val svg =
-    try Some(os.proc("dot", "-Tsvg").call(stdin = firrtlToDot(firrtlString), check = false)).filter(_.exitCode == 0).map(_.out.text())
+  val svg          =
+    try
+      Some(os.proc("dot", "-Tsvg").call(stdin = firrtlToDot(firrtlString), check = false))
+        .filter(_.exitCode == 0)
+        .map(_.out.text())
     catch { case _: java.io.IOException => None }
   svg.filter(_.nonEmpty) match {
     case Some(html) => almond.display.Html(html).display()
-    case None =>
+    case None       =>
       println("Graphviz (`dot`) is not available; showing the FIRRTL instead.")
       println(firrtlString)
   }

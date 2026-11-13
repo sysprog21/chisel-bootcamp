@@ -6,10 +6,16 @@ ALMOND_VERSION=0.14.5
 COURSIER_VERSION=2.1.24
 
 # Chisel 7 simulates with ChiselSim, which needs Verilator 5 or newer
-command -v verilator >/dev/null || { echo "ERROR: verilator not found" >&2; exit 1; }
+command -v verilator >/dev/null || {
+    echo "ERROR: verilator not found" >&2
+    exit 1
+}
 VERILATOR=$(verilator --version)
 echo "$VERILATOR"
-[ "$(echo "$VERILATOR" | sed -E 's/^Verilator ([0-9]+).*/\1/')" -ge 5 ] || { echo "ERROR: Verilator 5 or newer is required" >&2; exit 1; }
+[ "$(echo "$VERILATOR" | sed -E 's/^Verilator ([0-9]+).*/\1/')" -ge 5 ] || {
+    echo "ERROR: Verilator 5 or newer is required" >&2
+    exit 1
+}
 
 # Install coursier (the JVM launcher works on every platform)
 curl -fLo coursier "https://github.com/coursier/coursier/releases/download/v${COURSIER_VERSION}/coursier"

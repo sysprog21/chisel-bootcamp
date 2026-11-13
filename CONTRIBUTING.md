@@ -69,6 +69,12 @@ every deprecation warning as an unexpected error. The warning names the deprecat
 for code in `source/load-ivy.sc`, which only gets a count: compile the suspect definitions in a
 cell of their own to see the details.
 
+## The riscv/ project
+
+Exercises in `riscv/src/` contain `???`; their reference solutions are in `riscv/solutions/` at the
+same paths (see `riscv/DESIGN.md`). `tools/check-solutions.sh` checks that the scaffold compiles
+and that the solutions pass every test; run it after changing either.
+
 ## Adding a notebook
 
 1. Add an entry to the `notebooks` dict in `runtest.py` with the errors it is expected to

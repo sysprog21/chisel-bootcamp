@@ -55,7 +55,7 @@ jobs:
             changed=$(git diff --name-only "$BASE_SHA"...HEAD)
             notebooks=$(echo "$changed" | python3 tools/ci-notebooks.py changed)
             # the riscv/ tests depend only on riscv/ and the image
-            echo "$changed" | grep -qE '^(riscv/|Dockerfile$|\.dockerignore$|\.github/workflows/docker\.yml$)' || riscv=false
+            echo "$changed" | grep -qE '^(riscv/|source/load-(riscv|ivy)\.sc$|tools/check-solutions\.sh$|tests/(kernel|test_riscv_import)\.py$|Dockerfile$|\.dockerignore$|\.github/workflows/docker\.yml$)' || riscv=false
           else
             notebooks=$(python3 tools/ci-notebooks.py all)
           fi
@@ -148,9 +148,14 @@ jobs:
         with:
           name: image-${{ matrix.arch }}
           path: ${{ runner.temp }}
+      - uses: actions/checkout@v7 # for riscv/solutions, which the image leaves out
       - run: docker load --input "$RUNNER_TEMP/image.tar"
-      - name: sbt test (offline)
-        run: docker run --rm --network none -w /chisel-bootcamp/riscv "$IMAGE" sbt -batch test
+      - name: The scaffold compiles and the solutions pass every test (offline)
+        run: |
+          docker run --rm --network none -v "$PWD/riscv/solutions:/solutions:ro" -e SOLUTIONS=/solutions \
+            "$IMAGE" tools/check-solutions.sh
+      - name: Notebooks can use riscv/ (source/load-riscv.sc)
+        run: docker run --rm --network none "$IMAGE" python3 tests/test_riscv_import.py
 
   publish:
     # Build every platform on pull requests too, so a platform-specific break fails before

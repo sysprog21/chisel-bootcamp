@@ -31,3 +31,28 @@ extensions (M, A, C, F, ...). The CSR instructions (SYSTEM opcode, funct3 != 0) 
 Without CSRs there is no trap handler, so `ECALL`, `EBREAK`, an illegal instruction and a
 misaligned access (load/store, or a branch/jump target that is not 4-byte aligned) halt the
 core, which reports the cause on its retire port. `FENCE` is a no-op.
+
+## Exercises and solutions
+
+Students work in `src/`: a module that is an exercise compiles but contains `???` where the
+student's code goes, so its test fails with `NotImplementedError` until the exercise is done.
+The reference solutions live in `solutions/`, with the same paths as `src/` (for example
+`solutions/main/scala/riscv/Alu.scala`); a solution file replaces the scaffold file of the same
+name. Both are in this repository, so contributors keep them in sync, but `.dockerignore` keeps
+`solutions/` out of the Docker image that students use. The Module 5 notebooks are to show the
+solutions in hidden "Solution" boxes (`source/custom.js`), as the other modules do.
+
+`tools/check-solutions.sh` checks both: the scaffold compiles, and with `solutions/` copied over
+`src/` every test passes. CI runs it in the image with `solutions/` mounted. A course that wants
+the solutions private can move `solutions/` to a private repository and run the same script with
+`SOLUTIONS=/path/to/solutions`.
+
+## Using the project from notebooks
+
+`source/load-riscv.sc` compiles the project with sbt when `build.sbt`, `project/` or `src/main/`
+changed since the last compilation (it compares a list of paths, sizes and times, so deleted files
+count too) and adds `target/scala-2.13/classes` to the notebook's classpath, so a notebook can
+`import riscv._` and use the modules in `src/` (as written by the student). A running kernel keeps
+the classes it has loaded, so after editing `src/`, restart the kernel. There is one source
+tree; the notebooks do not copy code. Ammonite's `import $file` was not used: the sources have
+`package` declarations and need the Chisel compiler plugin, which sbt already handles.

@@ -170,6 +170,27 @@ object Rv32i {
       case _ => None
     }
   }
+
+  /** `word` as assembly, much as `objdump -d -M no-aliases` shows it (ABI register names, no
+    * pseudo-instructions, ", " between operands, shift amounts in decimal): branch and jump targets
+    * are absolute, computed from `pc`; `fence` shows no operands; a word that is not RV32I shows as
+    * `.word`.
+    */
+  def disassemble(word: Long, pc: Long = 0): String = decode(word).fold(f".word 0x${word & 0xffffffffL}%08x") { i =>
+    def r(n: Int) = Reg.names(n)
+    def target    = f"0x${(pc + i.imm) & 0xffffffffL}%x"
+    if (i.name == "fence" || i.name == "ecall" || i.name == "ebreak") i.name
+    else
+      encodings(i.name).format match {
+        case R                                       => s"${i.name} ${r(i.rd)}, ${r(i.rs1)}, ${r(i.rs2)}"
+        case I if i.name == "jalr" || isLoad(i.name) => s"${i.name} ${r(i.rd)}, ${i.imm}(${r(i.rs1)})"
+        case I                                       => s"${i.name} ${r(i.rd)}, ${r(i.rs1)}, ${i.imm}"
+        case S                                       => s"${i.name} ${r(i.rs2)}, ${i.imm}(${r(i.rs1)})"
+        case B                                       => s"${i.name} ${r(i.rs1)}, ${r(i.rs2)}, $target"
+        case U                                       => f"${i.name} ${r(i.rd)}, 0x${i.imm >>> 12}%x"
+        case J                                       => s"${i.name} ${r(i.rd)}, $target"
+      }
+  }
 }
 
 /** An assembled program. `words` is the memory image from `base`, one little-endian 32-bit word per

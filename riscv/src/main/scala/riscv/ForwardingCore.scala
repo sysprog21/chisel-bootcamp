@@ -15,8 +15,10 @@ import chisel3.util._
   *   - a data memory that answers late: while the access in MEM waits, the whole pipeline holds,
   *     and WB gets bubbles. The instruction memory must answer in the same cycle (a slow fetch
   *     needs a core that keeps its fetch request across a redirect).
+  *
+  * `forwardUnit` builds each of the two forwarding units (Module 5.9 passes one with a bug).
   */
-class ForwardingCore(resetPc: Long = Ram.base) extends Core {
+class ForwardingCore(resetPc: Long = Ram.base, forwardUnit: => Forward = new Forward) extends Core {
   val stopped                            = RegInit(false.B) // a halting instruction has passed MEM: fetch no more
   val halted                             = RegInit(false.B)
   val flush                              = Module(new PipelineFlush)
@@ -90,7 +92,7 @@ class ForwardingCore(resetPc: Long = Ram.base) extends Core {
   val fromExMem                               = Wire(Valid(new Result))
   val fromMemWb                               = Wire(Valid(new Result))
   def forward(rs: UInt, regValue: UInt): UInt = {
-    val f = Module(new Forward)
+    val f = Module(forwardUnit)
     f.io.rs       := rs
     f.io.regValue := regValue
     f.io.exMem    := fromExMem
@@ -146,14 +148,17 @@ class ForwardingCore(resetPc: Long = Ram.base) extends Core {
   val access     = exMem.valid && (load || store) && !misaligned && m.cause === HaltCause.Running
   val strobe     = ((1.U(5.W) << bytes) - 1.U)(3, 0)
   val sizeMask   = FillInterleaved(8, strobe)
-  io.dmem.req.valid      := access
-  io.dmem.req.bits.addr  := m.result(31, 2) ## 0.U(2.W)
+  // a request goes out once: after the memory accepts it (req.fire), MEM waits for the answer
+  val sent     = RegInit(false.B)
+  when(io.dmem.resp.valid)(sent := false.B).elsewhen(io.dmem.req.fire)(sent := true.B)
+  io.dmem.req.valid := access && !sent
+  io.dmem.req.bits.addr := m.result(31, 2) ## 0.U(2.W)
   io.dmem.req.bits.wdata := (m.storeData << shamt)(31, 0)
   io.dmem.req.bits.wstrb := Mux(store, (strobe << offset)(3, 0), 0.U)
-  val extend = Module(new LoadExtend)
+  val extend   = Module(new LoadExtend)
   extend.io.funct3 := funct3
   extend.io.offset := offset
-  extend.io.rdata  := io.dmem.resp.bits.rdata
+  extend.io.rdata := io.dmem.resp.bits.rdata
   val causeMem = MuxCase(
     HaltCause.Running,
     Seq(

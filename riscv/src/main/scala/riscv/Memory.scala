@@ -21,10 +21,11 @@ class MemResp extends Bundle {
 }
 
 /** The memory interface of the cores: the core sends a request (`req`) and the memory answers
-  * (`resp`). The cores hold a request until its answer comes and ignore `ready`. The single-cycle
-  * and 5.6 cores need both ports to answer in the same cycle as the request (the RAM of this file
-  * does); `ForwardingCore` also waits for a data port that answers later, but its instruction port
-  * must answer in the same cycle.
+  * (`resp`). The single-cycle and 5.6 cores hold a request until its answer comes and ignore
+  * `ready`, so both of their ports must answer in the same cycle (the RAM of this file does).
+  * `ForwardingCore` sends a data request once, when it is taken (`req.fire`), and then waits for the
+  * answer, so a device that takes a request must keep it until it answers (the `Bus` does); its
+  * instruction port must still answer in the same cycle.
   */
 class MemPort extends Bundle {
   val req  = Decoupled(new MemReq)

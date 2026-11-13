@@ -6,21 +6,15 @@ import org.scalatest.flatspec.AnyFlatSpec
 
 /** The forwarding core with a data memory that answers `delay` cycles late. */
 class SlowDataSystem(delay: Int) extends RiscvSystem {
-  require(delay >= 0 && delay < 256, "the wait counter has 8 bits")
   val core = Module(new ForwardingCore)
   val ram  = Module(new Ram)
+  val slow = Module(new Delay(delay))
   ram.io.imem <> core.io.imem
-  val waited = RegInit(0.U(8.W))
-  val answer = core.io.dmem.req.valid && waited === delay.U
-  waited                  := Mux(core.io.dmem.req.valid && !answer, waited + 1.U, 0.U)
-  ram.io.dmem.req.valid   := answer
-  ram.io.dmem.req.bits    := core.io.dmem.req.bits
-  core.io.dmem.req.ready  := answer
-  core.io.dmem.resp.valid := answer
-  core.io.dmem.resp.bits  := ram.io.dmem.resp.bits
-  ram.io.load             := io.load
-  io.retire               := core.io.retire
-  io.halted               := core.io.halted
+  slow.io.in <> core.io.dmem
+  ram.io.dmem <> slow.io.out
+  ram.io.load := io.load
+  io.retire   := core.io.retire
+  io.halted   := core.io.halted
   io.dbg <> core.io.dbg
 }
 

@@ -336,4 +336,18 @@ class AsmSpec extends AnyFlatSpec {
       assert(e.getMessage.startsWith("line "), e.getMessage)
     }
   }
+
+  "Rv32i.disassemble" should "give text that assembles back into the same word" in {
+    val dirs  = Seq("programs/src", "programs/riscv-tests/rv32ui")
+    val words = dirs.flatMap(d => TestPrograms.names(d).flatMap(n => Asm(TestPrograms.source(d, n)))).distinct
+    val insts = words.filter(w => Rv32i.decode(w).exists(_.name != "fence")) // fence shows no operands
+    assert(insts.size > 500)
+    for (w <- insts) {
+      val text = Rv32i.disassemble(w) // at pc 0, a target is the offset, which is what Asm takes
+      assert(Asm(text) == Seq(w), f"0x$w%08x: $text")
+    }
+    assert(Rv32i.disassemble(0) == ".word 0x00000000")
+    assert(Rv32i.disassemble(0x00a50513L) == "addi a0, a0, 10")
+    assert(Rv32i.disassemble(0xfe0718e3L, 0x80000010L) == "bne a4, zero, 0x80000000")
+  }
 }

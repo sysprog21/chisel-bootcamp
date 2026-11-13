@@ -157,6 +157,19 @@ class IsaSimSpec extends AnyFlatSpec {
     assert(trace.last.pc == 0xfffffffcL && trace.last.nextPc == 0 && top.pc == 0)
   }
 
+  it should "keep only the bytes a load reads from a device" in {
+    val ones = new Device { // a device whose reads set every bit
+      val base                                      = 0x10000000L
+      val size                                      = 4L
+      def read(addr: Long, bytes: Int)              = 0xffffffffL
+      def write(addr: Long, bytes: Int, data: Long) = ()
+    }
+    val sim = new IsaSim(Asm("li t0, 0x10000000\nlbu a0, 0(t0)\nlhu a1, 0(t0)\necall"), devices = Seq(ones))
+    val ret = sim.run()
+    assert(sim.reg(Reg("a0")) == 0xff && sim.reg(Reg("a1")) == 0xffff)
+    assert(ret.flatMap(_.mem).map(_.data) == Seq(0xffL, 0xffffL))
+  }
+
   it should "reject a RAM that is not whole words inside the 32-bit address space" in {
     for ((base, size) <- Seq(2L -> 1024, 0L -> 1022, 0xffff0000L -> 0x20000, -4L -> 1024))
       assertThrows[IllegalArgumentException](new IsaSim(Nil, base, size))

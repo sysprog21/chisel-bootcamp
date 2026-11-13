@@ -20,6 +20,11 @@ class SystemIO extends Bundle {
   */
 abstract class RiscvSystem extends Module {
   val io = IO(new SystemIO)
+
+  /** The golden model of this system for a program (`CoSim.compare` uses it): the RAM, and the
+    * system's devices if it has any.
+    */
+  def model(image: Seq[Long]): IsaSim = new IsaSim(image)
 }
 
 /** The ports of a core: instruction and data memory, the retire port, whether it has halted, and

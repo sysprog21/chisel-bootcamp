@@ -101,6 +101,14 @@ Check with `verilator --version`.
 Chisel also needs CIRCT's `firtool` to generate SystemVerilog. You don't have to install it: Chisel downloads the matching version on first use (this needs Internet access once).
 You can also point the `CHISEL_FIRTOOL_PATH` environment variable at a directory that contains `firtool` 1.160.0.
 
+#### Yosys
+
+Module 5.9 proves a property with [Yosys](https://yosyshq.net/yosys/), run as `yosys`. The Docker
+image installs YoWASP's build (Yosys compiled to WebAssembly); locally, install either your
+system's `yosys` (for example `sudo apt install yosys` or `brew install yosys`) or the same build
+with `pip install yowasp-yosys` (`riscv.Formal` runs `yosys`, or else `yowasp-yosys`). Without
+it, the formal-check cells of 5.9 print that Yosys is not installed, and its other cells still run.
+
 #### Visualizations
 
 [Graphviz](https://graphviz.org/download/) is required to show visualizations of Chisel modules, such as in the demo page. However, visualizations are optional as the other Chisel and Scala features will work without it.

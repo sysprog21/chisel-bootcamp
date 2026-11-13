@@ -146,14 +146,17 @@ class ForwardingCore(resetPc: Long = Ram.base) extends Core {
   val access     = exMem.valid && (load || store) && !misaligned && m.cause === HaltCause.Running
   val strobe     = ((1.U(5.W) << bytes) - 1.U)(3, 0)
   val sizeMask   = FillInterleaved(8, strobe)
-  io.dmem.req.valid      := access
-  io.dmem.req.bits.addr  := m.result(31, 2) ## 0.U(2.W)
+  // a request goes out once: after the memory accepts it (req.fire), MEM waits for the answer
+  val sent     = RegInit(false.B)
+  when(io.dmem.resp.valid)(sent := false.B).elsewhen(io.dmem.req.fire)(sent := true.B)
+  io.dmem.req.valid := access && !sent
+  io.dmem.req.bits.addr := m.result(31, 2) ## 0.U(2.W)
   io.dmem.req.bits.wdata := (m.storeData << shamt)(31, 0)
   io.dmem.req.bits.wstrb := Mux(store, (strobe << offset)(3, 0), 0.U)
-  val extend = Module(new LoadExtend)
+  val extend   = Module(new LoadExtend)
   extend.io.funct3 := funct3
   extend.io.offset := offset
-  extend.io.rdata  := io.dmem.resp.bits.rdata
+  extend.io.rdata := io.dmem.resp.bits.rdata
   val causeMem = MuxCase(
     HaltCause.Running,
     Seq(

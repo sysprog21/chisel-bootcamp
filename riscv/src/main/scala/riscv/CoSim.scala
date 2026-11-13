@@ -100,15 +100,15 @@ object CoSim {
   def compare(c: RiscvSystem, image: Seq[Long], maxCycles: Int = 100000): Option[String] = {
     load(c, image)
     val core                    = run(c, maxCycles)
-    val model                   = new IsaSim(image).run(maxCycles)
+    val golden                  = c.model(image).run(maxCycles)
     def show(r: Option[Retire]) = r.fold("(nothing)")(_.toString)
     def differ(i: Int)          =
-      Some(s"instruction $i:\n  core:  ${show(core.lift(i))}\n  model: ${show(model.lift(i))}")
-    val i = core.zip(model).indexWhere { case (a, b) => a != b }
+      Some(s"instruction $i:\n  core:  ${show(core.lift(i))}\n  model: ${show(golden.lift(i))}")
+    val i = core.zip(golden).indexWhere { case (a, b) => a != b }
     if (i >= 0) differ(i)
     else if (!core.lastOption.exists(_.halt.isDefined))
       Some(s"the core did not halt within $maxCycles cycles (it retired ${core.size} instructions)")
-    else if (core.size != model.size) differ(core.size min model.size)
+    else if (core.size != golden.size) differ(core.size min golden.size)
     else afterHalt(c)
   }
 

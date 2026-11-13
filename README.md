@@ -89,6 +89,7 @@ exercises included, from the length of each notebook; they vary a lot with your 
 | [5.5_compliance](5.5_compliance.ipynb) | The official RISC-V tests on the processor | 15 min |
 | [5.6_pipeline](5.6_pipeline.ipynb) | A five-stage pipeline: stages, flushes, data hazards | 45 min |
 | [5.7_hazards](5.7_hazards.ipynb) | Hazards: forwarding, stalls, the official tests on the pipeline | 40 min |
+| [5.8_bus_and_mmio](5.8_bus_and_mmio.ipynb) | A bus, memory-mapped I/O and a UART: Hello, world | 45 min |
 
 Module 5 builds the processor in an sbt project under `riscv/` (see
 [Install.md](Install.md#the-riscv-sbt-project)): you write parts of it in Scala files there, and the

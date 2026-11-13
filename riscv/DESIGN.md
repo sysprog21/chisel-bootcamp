@@ -31,7 +31,7 @@ extensions (M, A, C, F, ...). The CSR instructions (SYSTEM opcode, funct3 != 0) 
 Without CSRs there is no trap handler, so `ECALL`, `EBREAK`, an illegal instruction and a
 misaligned access (load/store, or a branch/jump target that is not 4-byte aligned) halt the
 core, which reports the cause on its retire port. So does an access (or a fetch) outside the RAM,
-until the bus and its memory-mapped devices arrive (Module 5.11). `FENCE` is a no-op. An
+until the bus and its memory-mapped devices arrive (Module 5.8). `FENCE` is a no-op. An
 instruction that halts the core retires without changing any state: a jump to a misaligned target
 does not write its link register. An access that is both misaligned and outside the RAM halts as
 misaligned, and a fetch outside the RAM retires with instruction word 0; the cores must report the
@@ -166,3 +166,19 @@ keeps its forwarded operands, and redirects wait; the instruction memory must st
 same cycle). It passes the rv32ui tests unchanged. `CoSim.timed` counts cycles: ForwardingSpec
 prints the CPI of the Fibonacci and factorial programs and checks that it beats the padded 5.6
 pipeline. The memory-wait path is tested with a data memory that answers two cycles late.
+
+## A bus and memory-mapped I/O
+
+`SocSystem` (`src/main/scala/riscv/Soc.scala`) puts `ForwardingCore`'s data port on a `Bus`
+(`Bus.scala`): one request at a time, registered (a cycle of latency), routed by address to a
+device that answers when it can; an unmapped address is answered with an error (a `BadAddress`
+halt). The devices are the RAM (`0x8000_0000`, 64 KB) and a `Uart` (`0x1000_0000`: a data register,
+and a status register at +4 that reads 1 while a byte is being sent). A write to the data register
+is not answered while the transmitter (`UartTx`, the exercise: start bit, 8 data bits LSB first,
+stop bit, `divider` cycles each) is busy, so programs need no status loop and their instruction
+streams stay deterministic. `ForwardingCore` sends each data request once (`req.fire`), then waits.
+Instructions still come from the RAM's own port, which answers in the same cycle. The golden model
+takes memory-mapped `Device`s (`UartModel` sends at once; each `RiscvSystem` gives its golden
+model, `SocSystem` with the UART), so `CoSim.compare` checks `programs/src/hello.S` instruction by
+instruction, and `UartReceiver` decodes `txd` in software. A program that reads the UART's status
+cannot be compared that way: the model's UART is never busy.

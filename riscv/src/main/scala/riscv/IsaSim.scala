@@ -38,14 +38,19 @@ case class Retire(
   * written with the course, not an independent reference, so it shares the course's reading of
   * the specification (and Rv32i.decode).
   *
-  * The memory is one RAM of `size` bytes at `base`, holding `image` (from `Asm`) and zeros after it.
+  * The memory is one RAM of `size` bytes at `base`, holding `image` (from `Asm`) and zeros after it,
+  * and the memory-mapped `devices` (loads and stores only; instructions come from the RAM).
   */
-class IsaSim(image: Seq[Long], val base: Long = Ram.base, val size: Int = Ram.bytes) {
+class IsaSim(image: Seq[Long], val base: Long = Ram.base, val size: Int = Ram.bytes, devices: Seq[Device] = Nil) {
   require(
     base >= 0 && base % 4 == 0 && size % 4 == 0 && size > 0 && base + size <= (1L << 32),
     "the RAM must be whole words"
   )
   require(image.size * 4L <= size, "the image is larger than the RAM")
+  require(
+    devices.forall(d => d.base + d.size <= base || d.base >= base + size),
+    "a device overlaps the RAM"
+  )
 
   /** Loads `program` at the address it was assembled for. */
   def this(program: Program) = this(program.words, program.base)
@@ -62,7 +67,14 @@ class IsaSim(image: Seq[Long], val base: Long = Ram.base, val size: Int = Ram.by
   def reg(n: Int): Long      = x(n) & 0xffffffffL
   def regs: IndexedSeq[Long] = (0 until 32).map(reg)
 
-  private def inRam(addr: Long, bytes: Int) = addr >= base && addr + bytes <= base + size
+  private def inRam(addr: Long, bytes: Int)  = addr >= base && addr + bytes <= base + size
+  private def device(addr: Long, bytes: Int) = devices.find(d => addr >= d.base && addr + bytes <= d.base + d.size)
+
+  // a load or store: from the RAM or a device (the callers checked that one of them is there)
+  private def load(addr: Long, bytes: Int): Long =
+    device(addr, bytes).fold(bytesAt(addr, bytes))(d => lowBytes(d.read(addr, bytes), bytes))
+  private def store(addr: Long, bytes: Int, value: Long): Unit =
+    device(addr, bytes).fold(write(addr, bytes, value))(_.write(addr, bytes, value))
 
   /** `bytes` bytes at `addr`, little-endian, zero-extended. */
   def read(addr: Long, bytes: Int): Long = {
@@ -116,7 +128,7 @@ class IsaSim(image: Seq[Long], val base: Long = Ram.base, val size: Int = Ram.by
     // a misaligned address halts as Misaligned even if it is also outside the RAM
     def access(addr: Long, bytes: Int)(body: => Retire): Retire =
       if (addr % bytes != 0) stop(pc, Halt.Misaligned, word)
-      else if (!inRam(addr, bytes)) stop(pc, Halt.BadAddress, word)
+      else if (!inRam(addr, bytes) && device(addr, bytes).isEmpty) stop(pc, Halt.BadAddress, word)
       else body
     lazy val addr  = u32(a.toLong + i.imm) // of loads, stores and jalr
     lazy val bytes = IsaSim.width(i.name)  // of loads and stores
@@ -130,14 +142,14 @@ class IsaSim(image: Seq[Long], val base: Long = Ram.base, val size: Int = Ram.by
         if (IsaSim.taken(i.name, a, b)) jump(u32(pc + i.imm)) else retire(pc + 4)
       case "lb" | "lh" | "lw" | "lbu" | "lhu" =>
         access(addr, bytes) {
-          val raw   = bytesAt(addr, bytes)
+          val raw   = load(addr, bytes)
           val value = IsaSim.loadValue(i.name, raw)
           retire(pc + 4, value, Some(MemAccess(addr, write = false, bytes, raw)))
         }
       case "sb" | "sh" | "sw" =>
         access(addr, bytes) {
           val data = lowBytes(u32(b), bytes)
-          write(addr, bytes, data)
+          store(addr, bytes, data)
           retire(pc + 4, mem = Some(MemAccess(addr, write = true, bytes, data)))
         }
       // one in-order core: nothing to order. Its rd field is reserved, so it is not written.
@@ -203,4 +215,14 @@ object IsaSim {
     val sim = new IsaSim(Asm.assemble(source))
     (sim, sim.run(maxSteps))
   }
+}
+
+/** A memory-mapped device of the golden model, at `base` to `base + size - 1`. A `read` of `bytes`
+  * bytes may set higher bits: the model keeps the low `bytes` bytes.
+  */
+trait Device {
+  def base: Long
+  def size: Long
+  def read(addr: Long, bytes: Int): Long
+  def write(addr: Long, bytes: Int, data: Long): Unit
 }

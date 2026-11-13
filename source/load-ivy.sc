@@ -47,16 +47,28 @@ def getFirrtl(dut: => chisel3.RawModule): String =
   scrub(circt.stage.ChiselStage.emitCHIRRTL(dut))
 
 // ChiselSim's `EphemeralSimulator.simulate`: elaborates `module`, compiles it with Verilator and
-// runs `body` against it. Two differences, so that the notebooks stay short:
+// runs `body` against it. Two differences and one option, so that the notebooks stay short:
 //  * errors go through `scrub`;
 //  * a `Module` is reset for one clock cycle before `body` runs, like chiseltest's `test`
 //    did. (ChiselSim itself leaves the reset to you: until it is asserted, registers hold
 //    random values.)
+//  * the option `randomization` chooses the initial values of registers and memories. ChiselSim's default
+//    randomizes both; `Randomization.random.copy(memories = false)` leaves memories alone, which a
+//    memory loaded from a file needs (the random values would overwrite the file's contents).
 // The `poke`/`peek`/`expect` methods come from `import chisel3.simulator.PeekPokeAPI._`.
-def simulate[T <: chisel3.RawModule](module: => T)(body: T => Unit): Unit = {
+def simulate[T <: chisel3.RawModule](
+  module:        => T,
+  randomization: chisel3.simulator.Randomization = chisel3.simulator.Randomization.random
+)(body: T => Unit): Unit = {
   import chisel3.fromBooleanToLiteral
   import chisel3.simulator.PeekPokeAPI._
-  scrub(chisel3.simulator.EphemeralSimulator.simulate(module) { dut =>
+  import chisel3.simulator.{ChiselSim, LayerControl, Settings}
+  // what EphemeralSimulator.simulate does, with the randomization setting added
+  implicit val directory: chisel3.testing.HasTestingDirectory =
+    chisel3.testing.HasTestingDirectory.temporary(deleteOnExit = true)
+  val settings =
+    Settings.defaultRaw[T].copy(verilogLayers = LayerControl.EnableAll, randomization = randomization)
+  scrub(new ChiselSim {}.simulateRaw(module, settings = settings) { dut =>
     dut match {
       case m: chisel3.Module =>
         m.reset.poke(true.B)

@@ -52,7 +52,9 @@ ENV SCALA_VERSION=2.13.18
 ENV ALMOND_VERSION=0.14.5
 ENV COURSIER_VERSION=2.1.24
 ENV CHISEL_VERSION=7.16.0
-# Must be the firtool version that Chisel $CHISEL_VERSION was published against
+# Must be the firtool version that Chisel $CHISEL_VERSION was published against (checked by
+# tools/check-versions.py, which also makes you revisit what 2.8_memories.ipynb says about how
+# this firtool builds a SyncReadMem).
 ENV FIRTOOL_VERSION=1.160.0
 ENV JUPYTER_CONFIG_DIR=/jupyter/config
 ENV JUPYTER_DATA_DIR=/jupyter/data

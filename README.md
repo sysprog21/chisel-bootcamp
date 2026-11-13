@@ -59,7 +59,8 @@ The rest of *Module 2* covers combinational and sequential logic, software and h
 *Module 3* teaches you how to write hardware generators in Chisel that take advantage of Scala's high-level programming language features.
 *Module 4* looks under the hood: the FIRRTL that Chisel emits, how CIRCT's `firtool` turns it into SystemVerilog, and how to write small programs that analyze and transform FIRRTL.
 By the end, you will be able to read and understand most of the [Chisel code base](https://github.com/chipsalliance/chisel) and begin using [Rocket Chip](https://github.com/chipsalliance/rocket-chip).
-This tutorial *does not* yet cover SBT, build systems, backend flows for FPGA or ASIC processes, or analog circuits.
+The `riscv/` directory is an sbt project for the RISC-V processor of Module 5 (see [Install.md](Install.md)).
+This tutorial *does not* yet cover backend flows for FPGA or ASIC processes, or analog circuits.
 
 ## Motivation
 All hardware description languages support writing single instances.

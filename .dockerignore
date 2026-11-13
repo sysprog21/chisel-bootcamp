@@ -18,3 +18,8 @@ target/
 out/
 pyproject.toml
 .scalafmt.conf
+riscv/build
+riscv/target
+riscv/project/target
+riscv/project/project
+riscv/.bsp

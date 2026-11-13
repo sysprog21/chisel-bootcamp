@@ -37,10 +37,11 @@ env:
 # https://docs.docker.com/build/ci/github-actions/multi-platform/
 jobs:
   select:
-    name: Choose the notebooks
+    name: Choose the tests
     runs-on: ubuntu-24.04
     outputs:
       notebooks: ${{ steps.select.outputs.notebooks }}
+      riscv: ${{ steps.select.outputs.riscv }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -49,13 +50,18 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          riscv=true
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            notebooks=$(git diff --name-only "$BASE_SHA"...HEAD | python3 tools/ci-notebooks.py changed)
+            changed=$(git diff --name-only "$BASE_SHA"...HEAD)
+            notebooks=$(echo "$changed" | python3 tools/ci-notebooks.py changed)
+            # the riscv/ tests depend only on riscv/ and the image
+            echo "$changed" | grep -qE '^(riscv/|Dockerfile$|\.dockerignore$|\.github/workflows/docker\.yml$)' || riscv=false
           else
             notebooks=$(python3 tools/ci-notebooks.py all)
           fi
           echo "notebooks=$notebooks" >> "$GITHUB_OUTPUT"
-          echo "Notebooks: $notebooks"
+          echo "riscv=$riscv" >> "$GITHUB_OUTPUT"
+          echo "Notebooks: $notebooks; riscv/ tests: $riscv"
 
   build:
     name: Build the ${{ matrix.arch }} image
@@ -125,12 +131,36 @@ jobs:
           docker run --rm --network none -e BOOTCAMP_CELL_TIMEOUT "$IMAGE" python3 runtest.py "$NOTEBOOK"
           echo "$NOTEBOOK (${{ matrix.arch }}): $(( $(date +%s) - start )) s" >> "$GITHUB_STEP_SUMMARY"
 
+  riscv:
+    name: riscv/ tests (${{ matrix.arch }})
+    needs: [select, build]
+    if: needs.select.outputs.riscv == 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: image-${{ matrix.arch }}
+          path: ${{ runner.temp }}
+      - run: docker load --input "$RUNNER_TEMP/image.tar"
+      - name: sbt test (offline)
+        run: docker run --rm --network none -w /chisel-bootcamp/riscv "$IMAGE" sbt -batch test
+
   publish:
     # Build every platform on pull requests too, so a platform-specific break fails before
     # merge; only a push to dev publishes.
     name: Build all platforms (publish only on push)
-    needs: notebooks
-    if: github.event_name != 'schedule'
+    needs: [notebooks, riscv]
+    # riscv is skipped on pull requests that do not touch it; that must not skip publishing
+    if: >-
+      !cancelled() && github.event_name != 'schedule' && needs.notebooks.result == 'success' &&
+      contains(fromJSON('["success", "skipped"]'), needs.riscv.result)
     runs-on: ubuntu-24.04
     permissions:
       contents: read

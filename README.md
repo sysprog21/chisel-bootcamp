@@ -38,6 +38,11 @@ nerdctl run -it --rm -p 8888:8888 sysprog21/chisel-bootcamp
 
 Then open the provided URL (starting with http://127.0.0.1:8888) in your browser.
 
+Image tags: `latest` follows the `dev` branch, `chisel-<version>` (for example `chisel-7.16.0`)
+is the newest image built for that Chisel release, and `sha-<commit>` (the first 7 hex digits
+of a `dev` commit; a commit superseded by a newer push while its build was queued has none)
+pins one exact build.
+
 ### Alternative Options
 
 - Try it online [HERE](https://mybinder.org/v2/gh/sysprog21/chisel-bootcamp/HEAD)! No local installation required!

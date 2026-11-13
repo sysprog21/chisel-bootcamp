@@ -18,8 +18,6 @@ import time
 
 from typing import Dict, List, Tuple
 
-from jupyter_client.manager import start_new_kernel
-
 ROOT = os.path.dirname(os.path.abspath(__file__))
 # The first cell downloads and compiles dependencies, each `simulate` runs Verilator.
 CELL_TIMEOUT = int(os.environ.get("BOOTCAMP_CELL_TIMEOUT", "600"))
@@ -37,6 +35,9 @@ def _notebook_run(path: str) -> List[Tuple[int, str]]:
 
     :returns the errors as a list of (cell index, "<error name>: <error value>").
     """
+    # Imported here so that other scripts can import `notebooks` without Jupyter installed
+    from jupyter_client.manager import start_new_kernel
+
     with open(path, encoding="utf-8") as f:
         nb = json.load(f)
 

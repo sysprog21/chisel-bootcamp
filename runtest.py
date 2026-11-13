@@ -7,6 +7,7 @@ are expected, in order; the run fails if the notebook reports anything else.
 
 Usage: runtest.py [notebook_name.ipynb] [notebook_name_2.ipynb] [...]
 """
+
 import itertools
 import json
 import os
@@ -69,8 +70,10 @@ def _notebook_run(path: str) -> List[Tuple[int, str]]:
                 if msg["parent_header"].get("msg_id") != msg_id:
                     continue
                 if msg["msg_type"] == "stream":
-                    errors += [(index, "Deprecation: " + m.group(0).strip())
-                               for m in DEPRECATION.finditer(msg["content"]["text"])]
+                    errors += [
+                        (index, "Deprecation: " + m.group(0).strip())
+                        for m in DEPRECATION.finditer(msg["content"]["text"])
+                    ]
                 elif msg["msg_type"] == "error":
                     content = msg["content"]
                     errors.append((index, "{}: {}".format(content["ename"], content["evalue"])))
@@ -102,8 +105,7 @@ def check_errors(file_name: str, expected: List[str], actual: List[Tuple[int, st
                 print("=" * 100, file=sys.stderr)
                 print(f"Errors detected in {file_name}", file=sys.stderr)
             got = "-- No Error --" if a is None else f"cell {a[0]}: {a[1][:100]!r}"
-            print(f"No match for {i}-th expected error {e if e else '-- No Error --'!r}, got {got}",
-                  file=sys.stderr)
+            print(f"No match for {i}-th expected error {e if e else '-- No Error --'!r}, got {got}", file=sys.stderr)
             return_value = False
     if not return_value:
         print("=" * 100, file=sys.stderr)
@@ -126,16 +128,16 @@ notebooks: Dict[str, List[str]] = {
     "3.1_parameters.ipynb": ["java.util.NoSuchElementException"],
     "3.2_collections.ipynb": [NOT_IMPLEMENTED],
     "3.2_interlude.ipynb": [],
-    "3.3_higher-order_functions.ipynb": [NOT_IMPLEMENTED] +
-                                        ["java.lang.UnsupportedOperationException"] +
-                                        [NOT_IMPLEMENTED] * 3,
+    "3.3_higher-order_functions.ipynb": [NOT_IMPLEMENTED]
+    + ["java.lang.UnsupportedOperationException"]
+    + [NOT_IMPLEMENTED] * 3,
     "3.4_functional_programming.ipynb": [NOT_IMPLEMENTED, COMPILATION_FAILED, NOT_IMPLEMENTED, COMPILATION_FAILED],
     "3.5_object_oriented_programming.ipynb": [],
-    "3.6_types.ipynb": ["ChiselException: Connection between sink"] +
-                       ["I give up!"] +
-                       ['expected ")"'] +
-                       [NOT_IMPLEMENTED] * 2 +
-                       [COMPILATION_FAILED] * 4,
+    "3.6_types.ipynb": ["ChiselException: Connection between sink"]
+    + ["I give up!"]
+    + ['expected ")"']
+    + [NOT_IMPLEMENTED] * 2
+    + [COMPILATION_FAILED] * 4,
     "4.1_firrtl_ast.ipynb": [NOT_IMPLEMENTED],
     "4.2_firrtl_ast_traversal.ipynb": [NOT_IMPLEMENTED],
     "4.3_firrtl_common_idioms.ipynb": [NOT_IMPLEMENTED],

@@ -16,3 +16,5 @@ __pycache__
 build/
 target/
 out/
+pyproject.toml
+.scalafmt.conf

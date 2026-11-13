@@ -10,6 +10,7 @@ notebooks run (documentation, images, tools, tests), it lists the smoke subset p
 notebooks; otherwise (the Dockerfile, `source/`, `runtest.py`, a workflow, ...) it lists every
 notebook, since any of them may break.
 """
+
 import fnmatch
 import json
 import os
@@ -23,13 +24,23 @@ from runtest import notebooks  # noqa: E402
 SMOKE = ["0_demo.ipynb", "2.1_first_module.ipynb", "2.6_chiselsim.ipynb", "4.1_firrtl_ast.ipynb"]
 # Files that cannot change the outcome of runtest.py: they are not in the image, are only
 # rendered, or are tested by jobs that always run (tests/test_visualizer.py).
-INERT = ["*.md", "LICENSE", "images/*", "binder/*", "tools/*", "tests/*", ".pre-commit-config.yaml",
-         ".github/dependabot.yml", ".github/workflows/checks.yml"]
+INERT = [
+    "*.md",
+    "LICENSE",
+    "images/*",
+    "binder/*",
+    "tools/*",
+    "tests/*",
+    ".pre-commit-config.yaml",
+    ".scalafmt.conf",
+    "pyproject.toml",
+    ".github/dependabot.yml",
+    ".github/workflows/checks.yml",
+]
 
 
 def select(mode, changed):
-    if mode == "all" or any(p not in notebooks and not any(fnmatch.fnmatch(p, g) for g in INERT)
-                            for p in changed):
+    if mode == "all" or any(p not in notebooks and not any(fnmatch.fnmatch(p, g) for g in INERT) for p in changed):
         return sorted(notebooks)
     return sorted((set(SMOKE) | set(changed)) & set(notebooks))
 

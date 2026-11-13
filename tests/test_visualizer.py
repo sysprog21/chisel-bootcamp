@@ -1,14 +1,24 @@
 """Run from the repository root: python3 tests/test_visualizer.py."""
+
 from jupyter_client.manager import start_new_kernel
-km,kc=start_new_kernel(kernel_name='scala',startup_timeout=300)
+
+km, kc = start_new_kernel(kernel_name="scala", startup_timeout=300)
+
+
 def run(code):
-    mid=kc.execute(code)
+    mid = kc.execute(code)
     while True:
-        m=kc.get_iopub_msg(timeout=180)
-        if m['parent_header'].get('msg_id') != mid: continue
-        if m['msg_type']=='stream': print(m['content']['text'], end='')
-        if m['msg_type']=='error': raise RuntimeError(m['content'])
-        if m['msg_type']=='status' and m['content']['execution_state']=='idle': break
+        m = kc.get_iopub_msg(timeout=180)
+        if m["parent_header"].get("msg_id") != mid:
+            continue
+        if m["msg_type"] == "stream":
+            print(m["content"]["text"], end="")
+        if m["msg_type"] == "error":
+            raise RuntimeError(m["content"])
+        if m["msg_type"] == "status" and m["content"]["execution_state"] == "idle":
+            break
+
+
 try:
     run('interp.load.module(os.pwd / "source" / "load-ivy.sc")')
     run('''val graph = firrtlToDot("""circuit Top :
@@ -77,9 +87,9 @@ assert(indexed.contains("values_index -> result"))
 assert(indexed.contains("result -> storage_index"))
 assert(indexed.contains("index -> storage_index"))
 assert(indexed.contains("storage_index -> storage"))''')
-    run('''assert(indexed.contains("storage -> storage_0"))
+    run("""assert(indexed.contains("storage -> storage_0"))
 assert(indexed.contains("storage_0 -> result"))
-assert(indexed.contains("values_1 -> values"))''')
+assert(indexed.contains("values_1 -> values"))""")
     run('''val nested = firrtlToDot("""circuit N :
   public module N :
     output io : { flip bus : { data : UInt<8> }, out : UInt<8> }
@@ -87,6 +97,7 @@ assert(indexed.contains("values_1 -> values"))''')
 """)
 assert(nested.contains("io_bus_data [shape=circle"))
 assert(nested.contains("io_out [shape=doublecircle"))''')
-    print('visualizer regression checks passed')
+    print("visualizer regression checks passed")
 finally:
-    kc.stop_channels(); km.shutdown_kernel(now=True)
+    kc.stop_channels()
+    km.shutdown_kernel(now=True)

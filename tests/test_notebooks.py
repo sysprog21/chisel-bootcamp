@@ -13,6 +13,7 @@ Usage: tests/test_notebooks.py [--self-test]
   --self-test seeds one violation per rule into a copy of the notebooks and checks that each
               rule reports it, then checks the real notebooks.
 """
+
 import glob
 import importlib.util
 import json
@@ -45,8 +46,7 @@ CODE = re.compile(r"```.*?```|`[^`\n]*`", re.DOTALL)
 
 
 def attrs(tag):
-    return {m.group(1).lower(): next(g for g in m.groups()[1:] if g is not None)
-            for m in HTML_ATTR.finditer(tag)}
+    return {m.group(1).lower(): next(g for g in m.groups()[1:] if g is not None) for m in HTML_ATTR.finditer(tag)}
 
 
 def is_remote(target):
@@ -81,8 +81,7 @@ def check_links(root):
         targets = [m.group(1) for m in MD_LINK.finditer(source)]
         targets += [attrs(t).get("href", "") for t in HTML_LINK.findall(source)]
         for target in targets:
-            if (PATH_LIKE.match(target) and not is_remote(target)
-                    and not os.path.exists(local_path(root, target))):
+            if PATH_LIKE.match(target) and not is_remote(target) and not os.path.exists(local_path(root, target)):
                 errors.append(f"{name} cell {index}: link to missing file {target}")
     return errors
 
@@ -97,14 +96,19 @@ def images(root):
 
 
 def check_images(root):
-    return [f"{name} cell {index}: " + (f"missing image {src}" if src else "image without src")
-            for name, index, src, _ in images(root)
-            if not src or (not is_remote(src) and not os.path.exists(local_path(root, src)))]
+    return [
+        f"{name} cell {index}: " + (f"missing image {src}" if src else "image without src")
+        for name, index, src, _ in images(root)
+        if not src or (not is_remote(src) and not os.path.exists(local_path(root, src)))
+    ]
 
 
 def check_alt_text(root):
-    return [f"{name} cell {index}: image {src} has no alt text"
-            for name, index, src, alt in images(root) if not (alt or "").strip()]
+    return [
+        f"{name} cell {index}: image {src} has no alt text"
+        for name, index, src, alt in images(root)
+        if not (alt or "").strip()
+    ]
 
 
 def read_allowlist(root):
@@ -118,8 +122,9 @@ def read_allowlist(root):
                 if not fields:
                     continue
                 if len(fields) != 2 or not fields[0].endswith(".ipynb") or fields[1] not in REMOVED_APIS:
-                    raise SystemExit(f"{ALLOWLIST}:{n}: expected '<notebook> <API>', API one of "
-                                     + ", ".join(REMOVED_APIS))
+                    raise SystemExit(
+                        f"{ALLOWLIST}:{n}: expected '<notebook> <API>', API one of " + ", ".join(REMOVED_APIS)
+                    )
                 allowed.add(tuple(fields))
     return allowed
 
@@ -134,10 +139,13 @@ def check_removed_apis(root):
             if kind == "markdown" and (name, api) in allowed:  # code cells are never allowed
                 used.add((name, api))
             else:
-                errors.append(f"{name} cell {index}: removed API {api} (if the mention in a markdown "
-                              f"cell is deliberate, add '{name} {api}' to {ALLOWLIST})")
-    errors += [f"{ALLOWLIST}: stale entry '{n} {a}' (the notebook does not mention it)"
-               for n, a in sorted(allowed - used)]
+                errors.append(
+                    f"{name} cell {index}: removed API {api} (if the mention in a markdown "
+                    f"cell is deliberate, add '{name} {api}' to {ALLOWLIST})"
+                )
+    errors += [
+        f"{ALLOWLIST}: stale entry '{n} {a}' (the notebook does not mention it)" for n, a in sorted(allowed - used)
+    ]
     return errors
 
 
@@ -147,8 +155,9 @@ def check_registered(root):
     spec.loader.exec_module(runtest)
     registered = set(runtest.notebooks)
     present = {os.path.basename(p) for p in glob.glob(os.path.join(root, "*.ipynb"))}
-    return ([f"{n}: not registered in `notebooks` of runtest.py" for n in sorted(present - registered)] +
-            [f"runtest.py: {n} is registered but does not exist" for n in sorted(registered - present)])
+    return [f"{n}: not registered in `notebooks` of runtest.py" for n in sorted(present - registered)] + [
+        f"runtest.py: {n} is registered but does not exist" for n in sorted(registered - present)
+    ]
 
 
 RULES = {

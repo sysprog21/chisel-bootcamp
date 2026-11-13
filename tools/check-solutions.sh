@@ -22,7 +22,7 @@ cp "$root/riscv/project/build.properties" "$work/project/"
 for f in "$root"/riscv/project/*.sbt "$root"/riscv/project/*.scala; do # plugins and build code, if any
     [ -e "$f" ] && cp "$f" "$work/project/"
 done
-cp -R "$root/riscv/src" "$work/"
+cp -R "$root/riscv/src" "$root/riscv/programs" "$work/" # the tests read programs/
 
 # A solution replaces the scaffold file at the same path; one without a scaffold is a mistake
 # (checked first: it needs no compile)

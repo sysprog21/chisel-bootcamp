@@ -1,7 +1,6 @@
 package riscv
 
 import chisel3._
-import chisel3.util.BitPat
 import chisel3.simulator.scalatest.ChiselSim
 import org.scalatest.flatspec.AnyFlatSpec
 
@@ -40,8 +39,7 @@ class IsaSpec extends AnyFlatSpec with ChiselSim {
       0x00000073L -> "ECALL"
     )
     for ((word, name) <- examples) {
-      val matches = Instructions.all.collect { case (n, p) if p.cover(BitPat(word.U(32.W))) => n }
-      assert(matches == Seq(name), f"0x$word%08x")
+      assert(Instructions.matching(word) == Seq(name), f"0x$word%08x")
     }
   }
 

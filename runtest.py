@@ -142,6 +142,7 @@ notebooks: Dict[str, List[str]] = {
     "4.2_firrtl_ast_traversal.ipynb": [NOT_IMPLEMENTED],
     "4.3_firrtl_common_idioms.ipynb": [NOT_IMPLEMENTED],
     "4.4_firrtl_add_ops_per_module.ipynb": [NOT_IMPLEMENTED],
+    "5.1_riscv_isa.ipynb": [NOT_IMPLEMENTED],
 }
 
 if __name__ == "__main__":

@@ -47,28 +47,46 @@ def getFirrtl(dut: => chisel3.RawModule): String =
   scrub(circt.stage.ChiselStage.emitCHIRRTL(dut))
 
 // ChiselSim's `EphemeralSimulator.simulate`: elaborates `module`, compiles it with Verilator and
-// runs `body` against it. Two differences and one option, so that the notebooks stay short:
+// runs `body` against it. Two differences and two options, so that the notebooks stay short:
 //  * errors go through `scrub`;
 //  * a `Module` is reset for one clock cycle before `body` runs, like chiseltest's `test`
 //    did. (ChiselSim itself leaves the reset to you: until it is asserted, registers hold
 //    random values.)
-//  * the option `randomization` chooses the initial values of registers and memories. ChiselSim's default
-//    randomizes both; `Randomization.random.copy(memories = false)` leaves memories alone, which a
-//    memory loaded from a file needs (the random values would overwrite the file's contents).
+//  * the option `randomization` chooses the initial values of registers and memories. ChiselSim's
+//    default randomizes both; `Randomization.random.copy(memories = false)` leaves memories alone,
+//    which a memory loaded from a file needs (the random values would overwrite its contents).
+//  * the option `waves = "name"` dumps a VCD waveform from time zero into build/name/ (kept after
+//    the simulation, unlike the temporary directory used otherwise) and prints its path.
 // The `poke`/`peek`/`expect` methods come from `import chisel3.simulator.PeekPokeAPI._`.
 def simulate[T <: chisel3.RawModule](
   module:        => T,
-  randomization: chisel3.simulator.Randomization = chisel3.simulator.Randomization.random
+  randomization: chisel3.simulator.Randomization = chisel3.simulator.Randomization.random,
+  waves:         String = ""
 )(body: T => Unit): Unit = {
   import chisel3.fromBooleanToLiteral
   import chisel3.simulator.PeekPokeAPI._
   import chisel3.simulator.{ChiselSim, LayerControl, Settings}
-  // what EphemeralSimulator.simulate does, with the randomization setting added
-  implicit val directory: chisel3.testing.HasTestingDirectory =
-    chisel3.testing.HasTestingDirectory.temporary(deleteOnExit = true)
+  import svsim.verilator.Backend.CompilationSettings.{TraceKind, TraceStyle}
+  require(waves.matches("[A-Za-z0-9_-]*"), s"waves: use letters, digits, '_' and '-' only, not '$waves'")
+  val waveDir = Option.when(waves.nonEmpty)(wavesDir(waves))
+  // what EphemeralSimulator.simulate does, with the two options added
+  implicit val directory: chisel3.testing.HasTestingDirectory = waveDir match {
+    case Some(dir) => new chisel3.testing.HasTestingDirectory { def getDirectory = dir.toNIO }
+    case None      => chisel3.testing.HasTestingDirectory.temporary(deleteOnExit = true)
+  }
+  // VCD support, as ChiselSim's -DemitVcd=1 test option sets it for Verilator
+  implicit val backendSettings: svsim.BackendSettingsModifications = {
+    case s: svsim.verilator.Backend.CompilationSettings if waveDir.nonEmpty =>
+      s.withTraceStyle(Some(TraceStyle(TraceKind.Vcd)))
+    case s => s
+  }
   val settings =
-    Settings.defaultRaw[T].copy(verilogLayers = LayerControl.EnableAll, randomization = randomization)
-  scrub(new ChiselSim {}.simulateRaw(module, settings = settings) { dut =>
+    Settings.defaultRaw[T].copy(
+      verilogLayers = LayerControl.EnableAll,
+      randomization = randomization,
+      enableWavesAtTimeZero = waveDir.nonEmpty
+    )
+  try scrub(new ChiselSim {}.simulateRaw(module, settings = settings) { dut =>
     dut match {
       case m: chisel3.Module =>
         m.reset.poke(true.B)
@@ -78,7 +96,25 @@ def simulate[T <: chisel3.RawModule](
     }
     body(dut)
   })
+  finally // also when the test fails, which is when the waves are most useful
+    if (waves.nonEmpty) wavesFile(waves).foreach(vcd => println(s"Waveform: $vcd"))
 }
+
+// Where `simulate(..., waves = name)` writes its files.
+def wavesDir(name: String): os.Path = os.pwd / "build" / name
+
+// The VCD file written by `simulate(..., waves = name)`, if there is one.
+def wavesFile(name: String): Option[os.Path] = {
+  val dir = wavesDir(name)
+  if (os.exists(dir)) os.walk(dir).find(_.ext == "vcd") else None
+}
+
+// Start and stop dumping waves inside a `simulate(..., waves = "name")` body, for example to
+// skip an uninteresting start-up phase. (Without `waves`, the simulation has no trace support and
+// these fail.)
+object waveControl extends chisel3.simulator.ControlAPI // Chisel has no ControlAPI object to import
+def enableWaves(): Unit = waveControl.enableWaves()
+def disableWaves(): Unit = waveControl.disableWaves()
 
 // Visualization: turn the FIRRTL emitted by Chisel into a Graphviz graph.
 // FIRRTL (spec 4.x, as emitted by Chisel 7) is line-oriented text, so a few regular

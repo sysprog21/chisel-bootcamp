@@ -202,9 +202,66 @@ class AsmSpec extends AnyFlatSpec {
     assert(program.symbols("end") == 0x800000ddL)
   }
 
+  it should "read riscv-tests' syntax like GNU as: ; separators, GNU operator precedence, .rept, .fill" in {
+    val source   = """
+          li a0, ((0xffffffffffff8000) & ((1 << (32 - 1) << 1) - 1)); li a1, ~0x10 + 2 * 3
+          li a2, ((-((0x8180) >> ((16)-1)) << (16)) | ((0x8180) & ((1 << (16))-1)))
+          li a3, 1 + 2 << 3 ; li a4, 7 & 3 + 1 ; li a5, 100 / 7 % 4  # 17, 4 and 2: not C's precedence
+          sll t0, t0, 3; sltu t1, t2, 5; xor t3, t3, -1               # slli, sltiu, xori
+      1:  lla t4, 1b
+          jr t4, -4
+          .rept 2
+          nop
+          .endr
+          .option norvc
+          ecall
+          .data
+          .fill 3, 2, 0x1234
+          .byte 9
+    """
+    val expected = Seq(0xffff8537L, 0xff500593L, 0xffff8637L, 0x18060613L, 0x01100693L, 0x00400713L, 0x00200793L,
+      0x00329293L, 0x0053b313L, 0xfffe4e13L, 0x00000e97L, 0x000e8e93L, 0xffce8067L, 0x00000013L, 0x00000013L,
+      0x00000073L, 0x12341234L, 0x00091234L)
+    assert(Asm(source, base = 0x80000000L) == expected)
+  }
+
+  it should "shift and fill like GNU as" in {
+    // GNU as: >> is logical on 64-bit values, shifts of 64 or more give 0, .fill's size is 1 by
+    // default, and a size above 4 gets the value's low 4 bytes
+    val source = """
+      .data
+      .word (-8 >> 62), (1 << 64), (-8 >> 1) >> 32
+      .fill 2
+      .byte 7
+      .fill 1, 8, 0x1122334455667788
+    """
+    assert(Asm(source) == Seq(3L, 0L, 0x7fffffffL, 0x88070000L, 0x00556677L, 0L))
+  }
+
+  it should "take a label before .rept and .endr" in {
+    assert(Asm("loop: .rept 2\nnop\n1: .endr\nj loop", base = 0) == Seq(0x13L, 0x13L, 0xff9ff06fL))
+  }
+
+  it should "leave an empty .data out of the image, whatever its alignment" in {
+    assert(Asm("nop\n.data\n.align 4") == Seq(0x13L))
+  }
+
+  it should "read octal numbers and pad after data in .text like GNU as" in {
+    // 010 is octal; after .byte, GNU as pads with a zero byte, a 2-byte c.nop, then nops
+    assert(
+      Asm("li a0, 010\nli a1, 0\n.byte 1\n.align 3\nnop", base = 0) ==
+        Seq(0x00800513L, 0x00000593L, 0x00010001L, 0x00000013L, 0x00000013L, 0x00000013L)
+    )
+    assertThrows[IllegalArgumentException](Asm("li a0, 08"))
+  }
+
   it should "pad .text with nops" in {
-    assert(Asm("nop\n.align 3\nebreak", base = 0) == Seq(0x13L, 0x13L, 0x00100073L))
+    // .text also ends padded to its largest alignment (8 bytes here), as with GNU as
+    assert(Asm("nop\n.align 3\nebreak", base = 0) == Seq(0x13L, 0x13L, 0x00100073L, 0x13L))
     assert(Asm.assemble("nop\n.data\n.byte 1, 2").hex == "00000013\n00000201\n")
+    // the default base is Ram.base, and a base not aligned to .text's largest alignment is an error
+    assert(Asm.assemble("nop").base == Ram.base)
+    assertThrows[IllegalArgumentException](Asm("nop\n.align 3\nnop", base = 4))
   }
 
   it should "align .data and .bss to their largest .align" in {
@@ -256,14 +313,23 @@ class AsmSpec extends AnyFlatSpec {
       ".frobnicate",        // unknown directive
       "addi a0, a0, %pcrel_lo(0)",
       ".word 1,,2",
-      ".zero",                   // missing size
-      ".zero 0x7fffffff",        // too large
-      ".equ N",                  // missing value
-      ".align",                  // missing alignment
-      ".data\n.string \"a\\\"",  // unterminated string
-      "addi a0, a0, 0xffffffff", // not -1
-      "lw a0, 4(sp",             // unbalanced parentheses
-      "li a0, 'a"                // unterminated character
+      ".rept 2\nnop",                               // .rept without .endr
+      ".endr",                                      // .endr without .rept
+      ".rept 1000000\n.rept 1000000\n.endr\n.endr", // empty blocks, repeated too often
+      "li a0, 1 / 0",                               // division by zero
+      ".data\n.fill 1, 9, 0",                       // a .fill size above 8
+      "sub a0, a0, 1",                              // there is no subi
+      ".zero",                                      // missing size
+      ".zero 0x7fffffff",                           // too large
+      ".equ N",                                     // missing value
+      ".align",                                     // missing alignment
+      ".data\n.string \"a\\\"",                     // unterminated string
+      "addi a0, a0, 0xffffffff",                    // not -1
+      "lw a0, 4(sp",                                // unbalanced parentheses
+      "li a0, 'a",                                  // unterminated character
+      "sw a0, x, a0\nx: .word 0",                   // the address register is the stored one
+      "sw a0, x, zero\nx: .word 0",                 // x0 cannot hold the address
+      "lw zero, x\nx: .word 0"                      // nor for a load
     )
     for (source <- bad) {
       val e = intercept[IllegalArgumentException](Asm(source))

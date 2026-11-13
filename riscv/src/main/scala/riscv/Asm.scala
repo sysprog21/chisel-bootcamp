@@ -187,19 +187,23 @@ case class Program(base: Long, words: IndexedSeq[Long], symbols: Map[String, Lon
 /** An RV32I assembler in the GNU syntax, so that the course needs no RISC-V toolchain (like the
   * assembler built into the Ripes simulator). It reads
   *
-  *   - one statement per line, `#` comments, labels (`loop:`, alone or before a statement) and
-  *     numeric local labels (`1:`, referred to as `1b` backwards or `1f` forwards);
+  *   - statements one per line or separated by `;`, `#` comments, labels (`loop:`, alone or before
+  *     a statement) and numeric local labels (`1:`, referred to as `1b` backwards or `1f` forwards);
   *   - the sections `.text`, `.data` and `.bss` (also `.section .text.init` and the like;
   *     `.rodata` goes to `.data`);
   *   - the directives `.word`/`.long`, `.half`/`.short`, `.byte`, `.ascii`, `.string`/`.asciz`,
-  *     `.zero`/`.space`, `.align`/`.p2align` (a power of 2), `.balign`, `.equ`/`.set`, and
-  *     `.globl`/`.global` (accepted, nothing to do);
-  *   - every RV32I instruction. An immediate is an expression of numbers (decimal, `0x`, `0b`,
-  *     `'c'`), symbols, `+`, `-`, parentheses and `%hi`, `%lo`, `%pcrel_hi` and `%pcrel_lo`;
-  *   - the RV32I pseudo-instructions `nop`, `li` (any 32-bit value), `la`, `mv`, `not`, `neg`,
-  *     `seqz`, `snez`, `sltz`, `sgtz`, `beqz`, `bnez`, `blez`, `bgez`, `bltz`, `bgtz`, `bgt`, `ble`,
-  *     `bgtu`, `bleu`, `j`, `jal label`, `jr`, `jalr rs`, `ret`, `call`, `tail`, and loads and stores
-  *     of a symbol (`lw rd, symbol` and `sw rs, symbol, rt`, through `auipc`).
+  *     `.zero`/`.space`, `.fill`, `.align`/`.p2align` (a power of 2), `.balign`, `.equ`/`.set`,
+  *     `.rept n` ... `.endr` (n a number), and `.globl`/`.global` and `.option` (nothing to do);
+  *   - every RV32I instruction. An immediate is an expression of numbers (decimal, octal `010`,
+  *     `0x`, `0b`, `'c'`; 64-bit, as in GNU as), symbols, parentheses, unary `-` and `~`, and the binary
+  *     operators of GNU as with its precedence (`*`, `/`, `%`, `<<`, `>>` above `|`, `&`, `^` above
+  *     `+`, `-`; `>>` is logical), and `%hi`, `%lo`, `%pcrel_hi` and `%pcrel_lo`. A register-register
+  *     ALU instruction with an immediate is its immediate form (`sll a0, a0, 1` is `slli`);
+  *   - the RV32I pseudo-instructions `nop`, `li` (any 32-bit value), `la` (and `lla`), `mv`, `not`,
+  *     `neg`, `seqz`, `snez`, `sltz`, `sgtz`, `beqz`, `bnez`, `blez`, `bgez`, `bltz`, `bgtz`, `bgt`,
+  *     `ble`, `bgtu`, `bleu`, `j`, `jal label`, `jr rs` (and `jr rs, offset`), `jalr rs`, `ret`,
+  *     `call`, `tail`, and loads and stores of a symbol (`lw rd, symbol` and `sw rs, symbol, rt`,
+  *     through `auipc`).
   *
   * A branch or jump target that uses a symbol is an address; a plain number is an offset from the
   * instruction (`beq a0, a1, 8` skips one instruction). GNU as reads a plain number as an address
@@ -209,9 +213,9 @@ case class Program(base: Long, words: IndexedSeq[Long], symbols: Map[String, Lon
 object Asm {
 
   /** The memory image of `source` assembled for address `base` (see [[Program]]). */
-  def apply(source: String, base: Long = 0x80000000L): Seq[Long] = assemble(source, base).words
+  def apply(source: String, base: Long = Ram.base): Seq[Long] = assemble(source, base).words
 
-  def assemble(source: String, base: Long = 0x80000000L): Program = new Assembler(source, base).program
+  def assemble(source: String, base: Long = Ram.base): Program = new Assembler(source, base).program
 
   /** `sbt "runMain riscv.Asm in.S out.hex"` writes the memory image of `in.S` for `$readmemh`. */
   def main(args: Array[String]): Unit = args match {
@@ -230,18 +234,22 @@ private final class Assembler(source: String, base: Long) {
 
   // ---- lexing
 
-  /** The line without its comment (a `#` outside a string or a character literal). */
-  private def stripComment(line: String): String = {
+  /** The statements of a line: GNU as separates them with `;`, and `#` starts a comment (both
+    * outside strings and character literals).
+    */
+  private def statements(line: String): Seq[String] = {
+    val out         = mutable.ListBuffer[String]()
     var quote: Char = 0
+    var start       = 0
     var i           = 0
-    while (i < line.length) {
+    while (i < line.length && !(quote == 0 && line(i) == '#')) {
       val c = line(i)
       if (quote != 0) { if (c == '\\') i += 1 else if (c == quote) quote = 0 }
       else if (c == '"' || c == '\'') quote = c
-      else if (c == '#') return line.take(i)
+      else if (c == ';') { out += line.substring(start, i); start = i + 1 }
       i += 1
     }
-    line
+    (out += line.substring(start, i.min(line.length))).toSeq
   }
 
   /** The operands, split at the commas that are outside strings, character literals and parentheses. */
@@ -312,7 +320,7 @@ private final class Assembler(source: String, base: Long) {
   }
 
   /** Runs `body` for one source line, adding the line to the message of any error. */
-  private def at(line: Int, text: String)(body: => Unit): Unit =
+  private def at[T](line: Int, text: String)(body: => T): T =
     try body
     catch {
       case e: IllegalArgumentException => throw new IllegalArgumentException(s"line $line: ${e.getMessage}: $text", e)
@@ -376,6 +384,16 @@ private final class Assembler(source: String, base: Long) {
   private val alignments = Set(".align", ".p2align", ".balign")
   private val maxSize    = 16L << 20 // per section: far beyond the course's memories, and no huge arrays
 
+  /** The repeat count and the size of `.fill repeat[, size[, value]]` (size 1 by default). */
+  private def fill(args: List[String]): (Long, Long) = args match {
+    case r :: rest if rest.size <= 2 =>
+      val (repeat, each) = (constant(r), rest.headOption.map(constant).getOrElse(1L))
+      if (repeat < 0 || repeat > maxSize || each < 0 || each > 8 || repeat * each > maxSize)
+        fail(s"bad .fill $repeat, $each")
+      (repeat, each)
+    case _ => fail(".fill needs a repeat count, and maybe a size and a value")
+  }
+
   private def one(op: String, args: List[String]): String = args match {
     case List(a) => a
     case _       => fail(s"$op needs one operand")
@@ -388,6 +406,7 @@ private final class Assembler(source: String, base: Long) {
     case ".ascii"             => args.map(string(_).length).sum
     case ".string" | ".asciz" => args.map(string(_).length + 1).sum
     case ".zero" | ".space" => val n = constant(one(op, args)); if (n < 0 || n > maxSize) fail(s"bad size $n"); n.toInt
+    case ".fill"            => val (repeat, each) = fill(args); (repeat * each).toInt
     case a if alignments(a) =>
       sectionAlign(section) = sectionAlign(section).max(alignment(op, one(op, args)))
       padding(op, one(op, args), offset)
@@ -397,8 +416,63 @@ private final class Assembler(source: String, base: Long) {
     case _ => 4 * expand(op, args, 0, stmts.size).size
   }
 
-  for ((raw, index) <- source.linesIterator.zipWithIndex) at(index + 1, raw.trim) {
-    var rest = stripComment(raw)
+  /** `(line, statement)` with each `.rept n` ... `.endr` block written out n times. The count must
+    * be a number (`.equ` symbols are not known yet when blocks are written out).
+    */
+  private def unroll(stmts: List[(Int, String)]): List[(Int, String)] = {
+    def directive(text: String)              = text.trim.takeWhile(!_.isWhitespace)
+    val out                                  = mutable.ListBuffer[(Int, String)]()
+    var work                                 = 0L // repetitions and statements: bounded, even for empty blocks
+    def go(stmts: List[(Int, String)]): Unit = {
+      var rest = stmts
+      while (rest.nonEmpty) {
+        val (line, text) = rest.head
+        directive(text) match {
+          case ".rept" =>
+            val n = at(line, text)(constant(text.trim.stripPrefix(".rept").trim))
+            if (n < 0 || n > maxSize) at(line, text)(fail(s"bad .rept count $n"))
+            // the matching .endr: count the .rept and .endr in between, stopping there
+            var depth = 1
+            val body  = rest.tail.takeWhile { case (_, t) =>
+              directive(t) match {
+                case ".rept" => depth += 1
+                case ".endr" => depth -= 1
+                case _       =>
+              }
+              depth > 0
+            }
+            if (depth > 0) at(line, text)(fail(".rept without .endr"))
+            for (_ <- 0L until n) {
+              work += 1
+              go(body)
+              if (work > maxSize) at(line, text)(fail(".rept writes out too many statements"))
+            }
+            rest = rest.tail.drop(body.size + 1)
+          case ".endr" => at(line, text)(fail(".endr without .rept"))
+          case _       => out += rest.head; work += 1; rest = rest.tail
+        }
+      }
+    }
+    go(stmts)
+    out.toList
+  }
+
+  /** The labels at the start of a statement, each as a statement of its own, then the rest (so that
+    * `loop: .rept 2` and `1: .endr` are seen by `unroll`).
+    */
+  private def splitLabels(text: String): List[String] = text match {
+    case labelDef(name, after) => s"$name:" :: splitLabels(after)
+    case _                     => List(text)
+  }
+
+  private val lines: List[(Int, String)] = unroll(
+    source.linesIterator.zipWithIndex.flatMap { case (raw, index) =>
+      statements(raw).flatMap(splitLabels).map((index + 1, _))
+    }.toList
+  )
+
+  for ((line, text) <- lines) at(line, text.trim) {
+    var rest = text
     var more = true
     while (more) rest match {
       case labelDef(name, after) =>
@@ -415,8 +489,8 @@ private final class Assembler(source: String, base: Long) {
       op match {
         case ".text" | ".data" | ".bss" => section = sectionOf(op)
         case ".section"                 => section = sectionOf(args.headOption.getOrElse(fail("missing section name")))
-        case ".globl" | ".global"       =>
-        case ".equ" | ".set"            =>
+        case ".globl" | ".global" | ".option" => // nothing to do (.option: rvc, push, pop, ...)
+        case ".equ" | ".set"                  =>
           val (name, value) = args match {
             case List(n, v) => (n, v)
             case _          => fail(s"$op needs a name and a value")
@@ -428,16 +502,22 @@ private final class Assembler(source: String, base: Long) {
           if (section == "bss" && !(op == ".zero" || op == ".space" || alignments(op)))
             fail(s"$op in .bss, which holds no data")
           val n = size(op, args, sizes(section))
-          stmts += Stmt(index + 1, raw.trim, op, args, section, sizes(section), n)
+          stmts += Stmt(line, text.trim, op, args, section, sizes(section), n)
           sizes(section) += n
           if (sizes(section) > maxSize) fail(s".$section is larger than ${maxSize >> 20} MB")
       }
     }
   }
 
+  // the labels of .text are aligned only if .text starts at an address aligned as it requires
+  if (base % sectionAlign("text") != 0) fail(f"base 0x$base%x is not aligned to the .align of .text")
+
   private def align4(n: Long)           = (n + 3) & ~3L
   private def alignUp(n: Long, a: Long) = (n + a - 1) & -a
-  private val sectionBase               = {
+  // as GNU as, .text ends padded (with nops) to its largest alignment, and .data comes after that
+  private val textEnd = sizes("text")
+  sizes("text") = alignUp(textEnd, sectionAlign("text")).toInt
+  private val sectionBase = {
     val data = alignUp(base + sizes("text"), sectionAlign("data"))
     Map("text" -> base, "data" -> data, "bss" -> alignUp(data + sizes("data"), sectionAlign("bss")))
   }
@@ -478,23 +558,40 @@ private final class Assembler(source: String, base: Long) {
     def expect(c: Char): Unit = {
       ws(); if (i < expr.length && expr(i) == c) i += 1 else fail(s"expected '$c' in '$expr'")
     }
-    def sum(): Long = {
-      var v = term()
-      ws()
-      while (i < expr.length && (expr(i) == '+' || expr(i) == '-')) {
-        val minus = expr(i) == '-'
-        i += 1
-        val t = term()
-        v = if (minus) v - t else v + t
+    // GNU as's binary operators, from the lowest precedence: + and -; then |, & and ^; then *, /,
+    // %, << and >> (not C's order). Values are 64-bit, as in GNU as.
+    // (an operator of two characters must come before one that is its first character)
+    def binary(next: () => Long, ops: Seq[(String, (Long, Long) => Long)]): Long = {
+      var v    = next()
+      var more = true
+      while (more) {
         ws()
+        ops.find { case (op, _) => expr.startsWith(op, i) } match {
+          case Some((op, f)) => i += op.length; v = f(v, next())
+          case None          => more = false
+        }
       }
       v
     }
+    def shift(b: Long)(f: => Long): Long = if (b < 0 || b > 63) 0 else f // as GNU as (with a warning)
+    def sum(): Long                      = binary(() => logic(), Seq("+" -> (_ + _), "-" -> (_ - _)))
+    def logic(): Long                    = binary(() => product(), Seq("|" -> (_ | _), "&" -> (_ & _), "^" -> (_ ^ _)))
+    def product(): Long                  = binary(
+      () => term(),
+      Seq(
+        "<<" -> ((a, b) => shift(b)(a << b)),
+        ">>" -> ((a, b) => shift(b)(a >>> b)), // logical, as GNU as
+        "*"  -> (_ * _),
+        "/"  -> ((a, b) => if (b == 0) fail(s"division by zero in '$expr'") else a / b),
+        "%"  -> ((a, b) => if (b == 0) fail(s"division by zero in '$expr'") else a % b)
+      )
+    )
     def term(): Long = {
       ws()
       if (i >= expr.length) fail(s"missing value in '$expr'")
       expr(i) match {
         case '-'  => i += 1; -term()
+        case '~'  => i += 1; ~term()
         case '('  => i += 1; val v = sum(); expect(')'); v
         case '\'' =>
           i += 1
@@ -522,10 +619,13 @@ private final class Assembler(source: String, base: Long) {
         case c if c.isDigit =>
           val w = word()
           w match {
-            case localRef(_, _)                                => symbolic = true; sym(w)
-            case _ if w.startsWith("0x") || w.startsWith("0X") => java.lang.Long.parseLong(w.drop(2), 16)
-            case _ if w.startsWith("0b") || w.startsWith("0B") => java.lang.Long.parseLong(w.drop(2), 2)
-            case _                                             => w.toLong
+            case localRef(_, _) => symbolic = true; sym(w)
+            // up to 64 bits, which wrap as in GNU as (0xffffffffffffffff is -1)
+            case _ if w.startsWith("0x") || w.startsWith("0X") => java.lang.Long.parseUnsignedLong(w.drop(2), 16)
+            case _ if w.startsWith("0b") || w.startsWith("0B") => java.lang.Long.parseUnsignedLong(w.drop(2), 2)
+            // a leading 0 makes it octal, as in GNU as (010 is 8)
+            case _ if w.length > 1 && w.head == '0' => java.lang.Long.parseUnsignedLong(w.drop(1), 8)
+            case _                                  => java.lang.Long.parseUnsignedLong(w)
           }
         case c if c.isLetter || c == '_' || c == '.' || c == '$' =>
           val w = word()
@@ -549,6 +649,9 @@ private final class Assembler(source: String, base: Long) {
     if (v < Int.MinValue || v > 0xffffffffL) fail(s"$v does not fit in 32 bits")
     v.toInt
   }
+
+  /** The I-type instruction that does what R-type `op` does, with an immediate (`sltu` -> `sltiu`). */
+  private def immediateForm(op: String): String = if (op == "sltu") "sltiu" else op + "i"
 
   /** The instructions of statement number `seq`, `op args`, at address `pc`. In pass 1 only their
     * number matters, so labels count as 0.
@@ -596,44 +699,52 @@ private final class Assembler(source: String, base: Long) {
         if (!isAddress && hi == 0) Seq(Inst("addi", r(rd), imm = lo))
         else if (!isAddress && lo == 0) Seq(Inst("lui", r(rd), imm = hi))
         else Seq(Inst("lui", r(rd), imm = hi), Inst("addi", r(rd), r(rd), imm = lo))
-      case ("la", List(rd, sym))                         => far(sym, r(rd))(lo => Inst("addi", r(rd), r(rd), imm = lo))
-      case ("call", List(sym))                           => far(sym, 1)(lo => Inst("jalr", 1, 1, imm = lo))
-      case ("tail", List(sym))                           => far(sym, 6)(lo => Inst("jalr", 0, 6, imm = lo))
-      case ("mv", List(rd, rs))                          => Seq(Inst("addi", r(rd), r(rs)))
-      case ("not", List(rd, rs))                         => Seq(Inst("xori", r(rd), r(rs), imm = -1))
-      case ("neg", List(rd, rs))                         => Seq(Inst("sub", r(rd), 0, r(rs)))
-      case ("seqz", List(rd, rs))                        => Seq(Inst("sltiu", r(rd), r(rs), imm = 1))
-      case ("snez", List(rd, rs))                        => Seq(Inst("sltu", r(rd), 0, r(rs)))
-      case ("sltz", List(rd, rs))                        => Seq(Inst("slt", r(rd), r(rs), 0))
-      case ("sgtz", List(rd, rs))                        => Seq(Inst("slt", r(rd), 0, r(rs)))
-      case ("beqz", List(rs, t))                         => Seq(Inst("beq", rs1 = r(rs), imm = target(t)))
-      case ("bnez", List(rs, t))                         => Seq(Inst("bne", rs1 = r(rs), imm = target(t)))
-      case ("blez", List(rs, t))                         => Seq(Inst("bge", rs2 = r(rs), imm = target(t)))
-      case ("bgez", List(rs, t))                         => Seq(Inst("bge", rs1 = r(rs), imm = target(t)))
-      case ("bltz", List(rs, t))                         => Seq(Inst("blt", rs1 = r(rs), imm = target(t)))
-      case ("bgtz", List(rs, t))                         => Seq(Inst("blt", rs2 = r(rs), imm = target(t)))
-      case ("bgt", List(a, b, t))                        => Seq(Inst("blt", rs1 = r(b), rs2 = r(a), imm = target(t)))
-      case ("ble", List(a, b, t))                        => Seq(Inst("bge", rs1 = r(b), rs2 = r(a), imm = target(t)))
-      case ("bgtu", List(a, b, t))                       => Seq(Inst("bltu", rs1 = r(b), rs2 = r(a), imm = target(t)))
-      case ("bleu", List(a, b, t))                       => Seq(Inst("bgeu", rs1 = r(b), rs2 = r(a), imm = target(t)))
-      case ("j", List(t))                                => Seq(Inst("jal", 0, imm = target(t)))
-      case ("jal", List(t))                              => Seq(Inst("jal", 1, imm = target(t)))
-      case ("jr", List(rs))                              => Seq(Inst("jalr", 0, r(rs)))
-      case ("jalr", List(rs))                            => Seq(Inst("jalr", 1, r(rs)))
-      case ("ret", Nil)                                  => Seq(Inst("jalr", 0, 1))
-      case ("fence", Nil)                                => Seq(Inst("fence", imm = 0xff)) // fence iorw, iorw
-      case ("fence", List(p, s))                         => Seq(Inst("fence", imm = fenceSet(p) << 4 | fenceSet(s)))
-      case ("ecall" | "ebreak", Nil)                     => Seq(Inst(op))
-      case ("jal", List(rd, t))                          => Seq(Inst("jal", r(rd), imm = target(t)))
-      case ("jalr", List(rd, Mem(o, rs)))                => Seq(Inst("jalr", r(rd), rs, imm = o))
-      case ("jalr", List(rd, rs, e))                     => Seq(Inst("jalr", r(rd), r(rs), imm = imm(e)))
+      case ("la" | "lla", List(rd, sym))  => far(sym, r(rd))(lo => Inst("addi", r(rd), r(rd), imm = lo))
+      case ("call", List(sym))            => far(sym, 1)(lo => Inst("jalr", 1, 1, imm = lo))
+      case ("tail", List(sym))            => far(sym, 6)(lo => Inst("jalr", 0, 6, imm = lo))
+      case ("mv", List(rd, rs))           => Seq(Inst("addi", r(rd), r(rs)))
+      case ("not", List(rd, rs))          => Seq(Inst("xori", r(rd), r(rs), imm = -1))
+      case ("neg", List(rd, rs))          => Seq(Inst("sub", r(rd), 0, r(rs)))
+      case ("seqz", List(rd, rs))         => Seq(Inst("sltiu", r(rd), r(rs), imm = 1))
+      case ("snez", List(rd, rs))         => Seq(Inst("sltu", r(rd), 0, r(rs)))
+      case ("sltz", List(rd, rs))         => Seq(Inst("slt", r(rd), r(rs), 0))
+      case ("sgtz", List(rd, rs))         => Seq(Inst("slt", r(rd), 0, r(rs)))
+      case ("beqz", List(rs, t))          => Seq(Inst("beq", rs1 = r(rs), imm = target(t)))
+      case ("bnez", List(rs, t))          => Seq(Inst("bne", rs1 = r(rs), imm = target(t)))
+      case ("blez", List(rs, t))          => Seq(Inst("bge", rs2 = r(rs), imm = target(t)))
+      case ("bgez", List(rs, t))          => Seq(Inst("bge", rs1 = r(rs), imm = target(t)))
+      case ("bltz", List(rs, t))          => Seq(Inst("blt", rs1 = r(rs), imm = target(t)))
+      case ("bgtz", List(rs, t))          => Seq(Inst("blt", rs2 = r(rs), imm = target(t)))
+      case ("bgt", List(a, b, t))         => Seq(Inst("blt", rs1 = r(b), rs2 = r(a), imm = target(t)))
+      case ("ble", List(a, b, t))         => Seq(Inst("bge", rs1 = r(b), rs2 = r(a), imm = target(t)))
+      case ("bgtu", List(a, b, t))        => Seq(Inst("bltu", rs1 = r(b), rs2 = r(a), imm = target(t)))
+      case ("bleu", List(a, b, t))        => Seq(Inst("bgeu", rs1 = r(b), rs2 = r(a), imm = target(t)))
+      case ("j", List(t))                 => Seq(Inst("jal", 0, imm = target(t)))
+      case ("jal", List(t))               => Seq(Inst("jal", 1, imm = target(t)))
+      case ("jr", List(rs))               => Seq(Inst("jalr", 0, r(rs)))
+      case ("jr", List(rs, e))            => Seq(Inst("jalr", 0, r(rs), imm = imm(e))) // jr rs, offset
+      case ("jalr", List(rs))             => Seq(Inst("jalr", 1, r(rs)))
+      case ("ret", Nil)                   => Seq(Inst("jalr", 0, 1))
+      case ("fence", Nil)                 => Seq(Inst("fence", imm = 0xff))            // fence iorw, iorw
+      case ("fence", List(p, s))          => Seq(Inst("fence", imm = fenceSet(p) << 4 | fenceSet(s)))
+      case ("ecall" | "ebreak", Nil)      => Seq(Inst(op))
+      case ("jal", List(rd, t))           => Seq(Inst("jal", r(rd), imm = target(t)))
+      case ("jalr", List(rd, Mem(o, rs))) => Seq(Inst("jalr", r(rd), rs, imm = o))
+      case ("jalr", List(rd, rs, e))      => Seq(Inst("jalr", r(rd), r(rs), imm = imm(e)))
       case (_, List(rd, Mem(o, rs))) if Rv32i.isLoad(op) => Seq(Inst(op, r(rd), rs, imm = o))
-      case (_, List(rd, sym)) if Rv32i.isLoad(op)        =>                                // lw rd, symbol
+      case (_, List(rd, sym)) if Rv32i.isLoad(op)        => // lw rd, symbol
+        // rd holds the address first: x0 cannot (the load would read address lo, not the symbol)
+        if (r(rd) == 0) fail(s"$op: $rd cannot hold the address of $sym")
         far(sym, r(rd))(lo => Inst(op, r(rd), r(rd), imm = lo))
+      // GNU as also takes an immediate for the register-register ALU instructions: sll a0, a0, 1
+      case (_, List(rd, rs1, e)) if format.contains(Format.R) && !Reg.isReg(e) && Rv32i.isAluImm(immediateForm(op)) =>
+        Seq(Inst(immediateForm(op), r(rd), r(rs1), imm = imm(e)))
       case (_, List(rd, rs1, rs2)) if format.contains(Format.R)     => Seq(Inst(op, r(rd), r(rs1), r(rs2)))
       case (_, List(rd, rs1, e)) if Rv32i.isAluImm(op)              => Seq(Inst(op, r(rd), r(rs1), imm = imm(e)))
       case (_, List(rs2, Mem(o, rs1))) if format.contains(Format.S) => Seq(Inst(op, rs1 = rs1, rs2 = r(rs2), imm = o))
       case (_, List(rs2, sym, rt)) if format.contains(Format.S)     => // sw rs2, symbol, rt
+        // rt holds the address: x0 cannot, and rs2 would be overwritten before it is stored
+        if (r(rt) == 0 || r(rt) == r(rs2)) fail(s"$op: the address register $rt must be neither x0 nor $rs2")
         far(sym, r(rt))(lo => Inst(op, rs1 = r(rt), rs2 = r(rs2), imm = lo))
       case (_, List(rs1, rs2, t)) if format.contains(Format.B) =>
         Seq(Inst(op, rs1 = r(rs1), rs2 = r(rs2), imm = target(t)))
@@ -666,12 +777,22 @@ private final class Assembler(source: String, base: Long) {
         s.args.foldLeft(s.offset) { (o, a) =>
           val b = string(a); b.copyToArray(bytes(s.section), o); o + b.length + zero
         }
+      case ".fill" => // repeat copies of value, each `size` bytes (little-endian)
+        val (repeat, each) = fill(s.args)
+        val value          = s.args.lift(2).map(evaluate(_, pc, symbol(_, seq))._1).getOrElse(0L)
+        // as GNU as: a size above 4 gets the value's low 4 bytes, then zeros
+        val low = if (each > 4) value & 0xffffffffL else value
+        for (k <- 0L until repeat) put(s.section, s.offset + (k * each).toInt, low, each.toInt)
       case ".zero" | ".space" => // the arrays start as zeros
       case a if alignments(a) => // padding: zeros in .data, nops in .text
         val pad = padding(a, s.args.head, s.offset) // one operand: checked in pass 1
-        if (s.section == "text") {
-          if (pad % 4 != 0) fail("padding in .text must be whole instructions")
-          for (k <- 0 until pad / 4) put("text", s.offset + 4 * k, Rv32i.encode(Inst("addi")), 4)
+        if (s.section == "text" && pad > 0) {
+          // as GNU as: a zero byte up to a half-word, the 2-byte c.nop (0x0001) up to a word, then
+          // nops (only after data such as .byte is the offset not a whole word)
+          val half = (s.offset + 1) & ~1
+          val word = (s.offset + 3) & ~3
+          if (half < word && word <= s.offset + pad) put("text", half, 0x0001, 2)
+          for (o <- word until s.offset + pad by 4) put("text", o, Rv32i.encode(Inst("addi")), 4)
         }
       case op =>
         val insts = expand(op, s.args, pc, seq)
@@ -679,6 +800,7 @@ private final class Assembler(source: String, base: Long) {
         for ((inst, k) <- insts.zipWithIndex) put("text", s.offset + 4 * k, Rv32i.encode(inst), 4)
     }
   }
+  for (o <- align4(textEnd).toInt until sizes("text") by 4) put("text", o, Rv32i.encode(Inst("addi")), 4)
 
   val program: Program = {
     def words(b: Array[Byte]): IndexedSeq[Long] =
@@ -688,7 +810,9 @@ private final class Assembler(source: String, base: Long) {
         .toIndexedSeq
     Program(
       base,
-      words(bytes("text").padTo((sectionBase("data") - base).toInt, 0.toByte)) ++ words(bytes("data")),
+      // the gap up to an aligned .data is zeros; an empty .data adds nothing (as GNU ld)
+      if (bytes("data").isEmpty) words(bytes("text"))
+      else words(bytes("text").padTo((sectionBase("data") - base).toInt, 0.toByte)) ++ words(bytes("data")),
       labels.map { case (n, (s, o)) => n -> address(s, o) }.toMap
     )
   }

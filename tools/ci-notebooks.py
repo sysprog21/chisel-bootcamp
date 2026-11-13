@@ -41,8 +41,14 @@ INERT = [
     ".github/workflows/checks.yml",
 ]
 # What the notebooks that load source/load-riscv.sc use from riscv/: what source/load-riscv.sc compiles, and the program
-# images (the rest of riscv/ is inert)
-RISCV_INPUTS = ["riscv/build.sbt", "riscv/project/*", "riscv/src/main/*", "riscv/programs/hex/*"]
+# images and the sources that 5.4 assembles (the rest of riscv/ is inert)
+RISCV_INPUTS = [
+    "riscv/build.sbt",
+    "riscv/project/*",
+    "riscv/src/main/*",
+    "riscv/programs/hex/*",
+    "riscv/programs/src/*",
+]
 
 
 def uses_riscv(notebook):

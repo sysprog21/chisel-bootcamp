@@ -18,6 +18,7 @@ The `sysprog21/chisel-bootcamp` image supports both x86-64 and Arm64 architectur
 - Scala 2.13.18 with Almond 0.14.5 kernel
 - Chisel 7.16.0 and CIRCT firtool 1.160.0 (preinstalled, so the image also works offline)
 - Verilator and a C++ toolchain, used by ChiselSim to simulate designs
+- sbt 1.13.1 with the dependencies of the `riscv/` project preloaded (see below)
 - Jupyter Lab
 - Graphviz for circuit visualization
 
@@ -183,6 +184,23 @@ a browser window.
 ##### Proxy usage
 If you require a proxy, try uncommenting and changing the relevant lines at the start of `source/load-ivy.sc`.
 
+### The `riscv/` sbt project
+
+Module 5 builds a RISC-V processor in an sbt project under `riscv/`. In the Docker image, sbt and
+everything the project needs are preinstalled, so it works offline. Open a terminal in Jupyter Lab
+(or `docker exec -it <container> bash`) and run:
+
+```bash
+cd riscv
+sbt test               # compile and run every test (ChiselSim tests need Verilator)
+sbt "testOnly riscv.IsaSpec"
+```
+
+Outside Docker, install [sbt](https://www.scala-sbt.org/download/) (any 1.x launcher; the project
+pins its sbt version in `riscv/project/build.properties`), a JDK 17 or later (what the image uses),
+and Verilator 5 as described above; the first `sbt` run downloads the dependencies.
+
+The image has no network access to fetch more: changing `scalaVersion` or adding a dependency to
+`riscv/build.sbt` makes the offline `sbt` fail. Run such builds with network access.
+
 Good Luck!
-
-

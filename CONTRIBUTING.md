@@ -19,13 +19,13 @@ CI runs the same hook and fails if it would change a notebook.
 - **Python:** [black](https://black.readthedocs.io/) with the settings in `pyproject.toml`.
 - **Shell:** [shfmt](https://github.com/mvdan/sh) with 4-space indentation (`shfmt -i 4`).
 - **Scala:** [scalafmt](https://scalameta.org/scalafmt/) with `.scalafmt.conf`, for
-  `source/*.sc` and the code cells of the notebooks.
+  `source/*.sc`, the `riscv/` project and the code cells of the notebooks.
 
 The pre-commit hooks above run black and shfmt. scalafmt needs a separate binary (download the
 version named in `.scalafmt.conf` from its releases, or `cs install scalafmt`); then
 
 ```bash
-python3 tools/format-scala.py          # formats source/*.sc and every notebook's Scala cells
+python3 tools/format-scala.py          # formats source/*.sc, riscv/ and every notebook's Scala cells
 python3 tools/format-scala.py --check  # what CI runs
 ```
 
@@ -68,6 +68,12 @@ Locally (see `Install.md`), run `python3 runtest.py <notebook>` from the reposit
 every deprecation warning as an unexpected error. The warning names the deprecated call, except
 for code in `source/load-ivy.sc`, which only gets a count: compile the suspect definitions in a
 cell of their own to see the details.
+
+## The riscv/ project
+
+Exercises in `riscv/src/` contain `???`; their reference solutions are in `riscv/solutions/` at the
+same paths (see `riscv/DESIGN.md`). `tools/check-solutions.sh` checks that the scaffold compiles
+and that the solutions pass every test; run it after changing either.
 
 ## Adding a notebook
 

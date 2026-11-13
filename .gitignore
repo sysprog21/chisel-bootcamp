@@ -17,3 +17,9 @@ almond
 
 # Python
 __pycache__/
+
+# sbt (riscv/)
+target/
+/riscv/build/
+/riscv/project/project/
+/riscv/.bsp/

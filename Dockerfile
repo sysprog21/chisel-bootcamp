@@ -51,6 +51,9 @@ RUN adduser -D -s /bin/bash bootcamp
 ENV SCALA_VERSION=2.13.18
 ENV ALMOND_VERSION=0.14.5
 ENV COURSIER_VERSION=2.1.24
+ENV SBT_VERSION=1.13.1
+# sha256 of sbt-$SBT_VERSION.tgz (from its GitHub release); update together with SBT_VERSION
+ENV SBT_SHA256=4a20e36c1642b6d5be34ef641d2ed6c8c0d464e6145283730d5566716e4083be
 ENV CHISEL_VERSION=7.16.0
 # Must be the firtool version that Chisel $CHISEL_VERSION was published against (checked by
 # tools/check-versions.py, which also makes you revisit what 2.8_memories.ipynb says about how
@@ -70,13 +73,15 @@ RUN mkdir -p $JUPYTER_CONFIG_DIR/custom && \
     cp source/jupyter_server_config.py $JUPYTER_CONFIG_DIR/ && \
     cp source/overrides.json $JUPYTER_CONFIG_DIR/lab/user-settings/@jupyterlab/apputils-extension/notification.jupyterlab-settings
 
-# Ammonite and the build stage use this preloaded cache
+# Ammonite, sbt and the build stage use this preloaded cache
 ENV COURSIER_CACHE=/coursier_cache
+ENV PATH=/opt/sbt/bin:$PATH
 
 # Second stage - download Scala requirements and the Scala kernel
 FROM base AS intermediate-builder
 
 ARG TARGETARCH
+ARG BUILDARCH
 
 # Download everything into the cache that the final image uses at runtime
 RUN mkdir /coursier_cache
@@ -124,6 +129,33 @@ RUN \
         mv /opt/firtool/bin/firtool.x86_64 /opt/firtool/bin/firtool; \
     fi
 
+# sbt for the riscv/ project (Module 5). sbt runs on the JRE: the project has no Java sources.
+# Its own files go to /opt/sbt-home (set in sbt's configuration file, so every user gets it).
+RUN \
+    curl -fL --retry 3 -o sbt.tgz "https://github.com/sbt/sbt/releases/download/v${SBT_VERSION}/sbt-${SBT_VERSION}.tgz" && \
+    echo "$SBT_SHA256  sbt.tgz" | sha256sum -c - && \
+    tar -xzf sbt.tgz -C /opt && \
+    rm sbt.tgz /opt/sbt/bin/sbtn-* /opt/sbt/bin/sbt.bat && \
+    printf '%s\n' -Dsbt.global.base=/opt/sbt-home/global -Dsbt.boot.directory=/opt/sbt-home/boot \
+        -Dsbt.ivy.home=/opt/sbt-home/ivy -Dsbt.server.forcestart=false >> /opt/sbt/conf/sbtopts
+
+# Preload what `sbt test` needs offline: the sbt runtime and the Scala 2.12 bridge that compiles
+# build.sbt (/opt/sbt-home), and the project's dependencies (/coursier_cache). Only the build
+# definition and two placeholder sources are used, so editing riscv/src does not redo this step.
+COPY riscv/build.sbt /tmp/riscv/
+COPY riscv/project/build.properties /tmp/riscv/project/
+RUN \
+    mkdir -p /tmp/riscv/src/main/scala /tmp/riscv/src/test/scala && \
+    echo 'class Warmup extends chisel3.Module' > /tmp/riscv/src/main/scala/Warmup.scala && \
+    echo 'class WarmupSpec extends org.scalatest.flatspec.AnyFlatSpec with chisel3.simulator.scalatest.ChiselSim' \
+        > /tmp/riscv/src/test/scala/WarmupSpec.scala && \
+    cd /tmp/riscv && \
+    # Under qemu (an Arm64 image cross-built on x86-64) the JVM crashes while probing SVE
+    if [ "$TARGETARCH" = "arm64" ] && [ "$BUILDARCH" != "arm64" ]; then export JAVA_TOOL_OPTIONS="-XX:UseSVE=0"; fi && \
+    sbt -batch update Test/compile && \
+    # (sbt regenerates java9-rt-ext, 59 MB, offline in a few seconds on first use)
+    cd / && rm -rf /tmp/riscv /opt/sbt-home/global/server /opt/sbt-home/global/java9-rt-ext-*
+
 # Last stage
 FROM base AS final
 
@@ -134,6 +166,8 @@ ENV CHISEL_FIRTOOL_PATH=/opt/firtool/bin
 COPY --from=intermediate-builder --chown=bootcamp:bootcamp /coursier_cache/ /coursier_cache/
 COPY --from=intermediate-builder --chown=bootcamp:bootcamp /usr/local/share/jupyter/kernels/scala/ /usr/local/share/jupyter/kernels/scala/
 COPY --from=intermediate-builder /opt/firtool/ /opt/firtool/
+COPY --from=intermediate-builder /opt/sbt/ /opt/sbt/
+COPY --from=intermediate-builder --chown=bootcamp:bootcamp /opt/sbt-home/ /opt/sbt-home/
 
 COPY --chown=bootcamp:bootcamp . /chisel-bootcamp/
 

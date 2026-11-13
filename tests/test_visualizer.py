@@ -1,25 +1,8 @@
 """Run from the repository root: python3 tests/test_visualizer.py."""
 
-from jupyter_client.manager import start_new_kernel
+from kernel import scala_kernel
 
-km, kc = start_new_kernel(kernel_name="scala", startup_timeout=300)
-
-
-def run(code):
-    mid = kc.execute(code)
-    while True:
-        m = kc.get_iopub_msg(timeout=180)
-        if m["parent_header"].get("msg_id") != mid:
-            continue
-        if m["msg_type"] == "stream":
-            print(m["content"]["text"], end="")
-        if m["msg_type"] == "error":
-            raise RuntimeError(m["content"])
-        if m["msg_type"] == "status" and m["content"]["execution_state"] == "idle":
-            break
-
-
-try:
+with scala_kernel(timeout=180) as run:
     run('interp.load.module(os.pwd / "source" / "load-ivy.sc")')
     run('''val graph = firrtlToDot("""circuit Top :
   module Child :
@@ -98,6 +81,3 @@ assert(indexed.contains("values_1 -> values"))""")
 assert(nested.contains("io_bus_data [shape=circle"))
 assert(nested.contains("io_out [shape=doublecircle"))''')
     print("visualizer regression checks passed")
-finally:
-    kc.stop_channels()
-    km.shutdown_kernel(now=True)

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Format the Scala code with scalafmt (and .scalafmt.conf): source/*.sc and the notebooks' code cells.
+"""Format the Scala code with scalafmt (and .scalafmt.conf): source files and the notebooks' code cells.
 
 Usage: tools/format-scala.py [--check] [--scalafmt PATH] [NOTEBOOK...]
 
-The scripts in source/ are formatted in place (with --check, only checked). Every code cell is
+The source files (source/*.sc, riscv/) are formatted in place (with --check, only checked). Every code cell is
 written to a temporary `.sc` file and all of them are formatted by one scalafmt run. A cell that
 scalafmt cannot format is left as it is; UNFORMATTABLE lists how many such cells each notebook is
 expected to have (cells that show a syntax error on purpose), and a different number is an error.
@@ -38,20 +38,23 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--check", action="store_true", help="report cells that would change, write nothing")
     parser.add_argument("--scalafmt", default="scalafmt", help="scalafmt executable")
-    parser.add_argument("notebooks", nargs="*", help="notebooks to format (default: all, and source/*.sc)")
+    parser.add_argument("notebooks", nargs="*", help="notebooks to format (default: all, and the source files)")
     args = parser.parse_args()
     config = ["--config", os.path.join(ROOT, ".scalafmt.conf"), "--non-interactive"]
 
-    # The scripts in source/ (only when formatting everything)
-    scripts = [] if args.notebooks else sorted(glob.glob(os.path.join(ROOT, "source", "*.sc")))
-    try:
-        if scripts:
-            mode = ["--test"] if args.check else []
-            scripts_ok = subprocess.run([args.scalafmt, *config, *mode, *scripts], cwd=ROOT).returncode == 0
-        else:
-            scripts_ok = True
-    except FileNotFoundError:
-        sys.exit(f"scalafmt not found ({args.scalafmt}); see CONTRIBUTING.md, or pass --scalafmt PATH")
+    def scalafmt(*argv, **kw):
+        try:
+            return subprocess.run([args.scalafmt, *config, *argv], **kw)
+        except FileNotFoundError:
+            sys.exit(f"scalafmt not found ({args.scalafmt}); see CONTRIBUTING.md, or pass --scalafmt PATH")
+
+    # The source files (only when formatting everything): the notebooks' setup script and riscv/
+    patterns = ["source/*.sc", "riscv/*.sbt", "riscv/src/**/*.scala", "riscv/solutions/**/*.scala"]
+    scripts = (
+        [] if args.notebooks else sorted(f for p in patterns for f in glob.glob(os.path.join(ROOT, p), recursive=True))
+    )
+    mode = ["--test"] if args.check else []
+    scripts_ok = not scripts or scalafmt(*mode, *scripts, cwd=ROOT).returncode == 0
 
     paths = sorted({os.path.abspath(p) for p in args.notebooks} or glob.glob(os.path.join(ROOT, "*.ipynb")))
 
@@ -68,7 +71,7 @@ def main():
                 files[name] = (path, cell)
         # One run for every cell, from the temporary directory: scalafmt only formats files below
         # its working directory. It names each file it fails on (a parse error or a crash).
-        run = subprocess.run([args.scalafmt, *config, *files], cwd=tmp, capture_output=True, text=True)
+        run = scalafmt(*files, cwd=tmp, capture_output=True, text=True)
         # scalafmt names a file it fails on as "FailedToFormat: <path>" (a crash) or "<path>:<line>: error"
         failures_found = re.findall(
             r"FailedToFormat: \S*?(\d{5}\.sc)\b|(\d{5}\.sc):\d+: error", run.stdout + run.stderr

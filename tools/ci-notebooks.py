@@ -23,9 +23,10 @@ from runtest import notebooks  # noqa: E402
 # Verilator (2.6), and the FIRRTL modules (4.1).
 SMOKE = ["0_demo.ipynb", "2.1_first_module.ipynb", "2.6_chiselsim.ipynb", "4.1_firrtl_ast.ipynb"]
 # Files that cannot change the outcome of runtest.py: they are not in the image, are only
-# rendered, or are tested by jobs that always run (tests/test_visualizer.py).
+# rendered, or are tested by other jobs (tests/test_visualizer.py always; riscv/ by the riscv job).
 INERT = [
     "*.md",
+    "riscv/*",
     "LICENSE",
     "images/*",
     "binder/*",

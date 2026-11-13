@@ -123,9 +123,11 @@ all-ones mask counts as none), so a masked write would write every byte (see 2.8
 `SingleCycleCore` retires one instruction per cycle and depends on that same-cycle answer (it
 ignores `ready`); a bus that answers later needs a core that tracks its requests. It reports each
 retired instruction on a `Valid(RetireInfo)` port with the fields of `IsaSim`'s `Retire`, and
-`CoSim` runs a program on the core and on `IsaSim` and returns the first difference. Its tests run
-directed programs (each feature, every halt cause), the committed programs and random programs
-through `CoSim`.
+`CoSim` runs a program on a core with its RAM (any `RiscvSystem`: the load, retire, halted and
+debug ports of `SystemIO`) and on `IsaSim`, and returns the first difference. The tests run
+directed programs (each feature, every halt cause), the committed programs, random programs, and
+`programs/regress/*.S`, programs that once exposed a bug (`RegressSpec`), through `CoSim`. Reset
+does not clear the RAM or the registers, so a program may read only what it wrote, or its image.
 
 ## The official tests
 

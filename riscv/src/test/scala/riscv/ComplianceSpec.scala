@@ -3,21 +3,15 @@ package riscv
 import chisel3.simulator.scalatest.ChiselSim
 import org.scalatest.flatspec.AnyFlatSpec
 
-import java.io.File
-import scala.io.Source
-import scala.util.Using
-
 /** The rv32ui tests of riscv-tests (riscv/programs/riscv-tests, imported by
   * tools/import-riscv-tests.py). A test passes if it ends with ECALL and a0 = 0; otherwise a0 is
   * (the number of the failing test << 1) | 1.
   */
 class ComplianceSpec extends AnyFlatSpec with ChiselSim {
-  val dir   = new File("programs/riscv-tests/rv32ui")
-  val tests =
-    Option(dir.list()).getOrElse(Array.empty[String]).filter(_.endsWith(".S")).sorted.map(_.stripSuffix(".S")).toSeq
+  val dir   = "programs/riscv-tests/rv32ui"
+  val tests = TestPrograms.names(dir)
   // each test assembled once, for the golden model and the core alike
-  val images =
-    tests.map(name => name -> Asm(Using.resource(Source.fromFile(new File(dir, s"$name.S")))(_.mkString))).toMap
+  val images = tests.map(name => name -> Asm(TestPrograms.source(dir, name))).toMap
 
   "The rv32ui tests" should "be there" in {
     assert(tests.size == 40 && tests.contains("add") && tests.contains("ld_st"))

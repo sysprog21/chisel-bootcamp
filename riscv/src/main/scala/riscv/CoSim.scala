@@ -5,8 +5,9 @@ import chisel3.simulator.PeekPokeAPI._
 
 import scala.collection.mutable
 
-/** Runs programs on a simulated [[SingleCycleSystem]] and compares what it retires with the golden
-  * model ([[IsaSim]]). Use it inside `simulate(new SingleCycleSystem) { c => ... }`.
+/** Runs programs on a simulated core with its RAM (a [[RiscvSystem]], such as
+  * [[SingleCycleSystem]]) and compares what it retires with the golden model ([[IsaSim]]). Use it
+  * inside `simulate(new SingleCycleSystem) { c => ... }`.
   */
 object CoSim {
 
@@ -14,7 +15,7 @@ object CoSim {
     * of the RAM keeps what it held (unknown at first; zeroing 64 KB would take 16384 cycles), where
     * the golden model has zeros: a program must not read memory that it did not load or store.
     */
-  def load(c: SingleCycleSystem, image: Seq[Long]): Unit = {
+  def load(c: RiscvSystem, image: Seq[Long]): Unit = {
     c.reset.poke(true.B)
     c.io.load.valid.poke(true.B)
     for ((word, i) <- image.zipWithIndex) {
@@ -36,7 +37,7 @@ object CoSim {
   )
 
   /** The instruction the core retires in this cycle, as a golden-model record, if any. */
-  def retired(c: SingleCycleSystem): Option[Retire] =
+  def retired(c: RiscvSystem): Option[Retire] =
     if (!c.io.retire.valid.peek().litToBoolean) None
     else {
       val r   = c.io.retire.bits
@@ -61,36 +62,47 @@ object CoSim {
       )
     }
 
-  /** Runs the loaded program until the core halts, at most `maxCycles` cycles; returns what retired. */
-  def run(c: SingleCycleSystem, maxCycles: Int = 100000): Seq[Retire] = {
+  /** Runs the loaded program until the instruction that halts the core retires, for at most
+    * `maxCycles` cycles; returns what retired (in order). A core may retire nothing in a cycle (a
+    * pipeline filling up, a stall), but at most one instruction.
+    */
+  def run(c: RiscvSystem, maxCycles: Int = 100000): Seq[Retire] = {
     val trace  = mutable.ArrayBuffer[Retire]()
     var cycles = 0
-    while (!c.io.halted.peek().litToBoolean && cycles < maxCycles) {
-      trace ++= retired(c)
-      c.clock.step()
+    var done   = false
+    while (!done && cycles < maxCycles) {
+      val r = retired(c) // before `halted`: a core may raise it in the cycle its halt retires
+      trace ++= r
+      done = r.exists(_.halt.isDefined) || c.io.halted.peek().litToBoolean
+      if (!done) c.clock.step() // stay on the halt: the registers can be read
       cycles += 1
     }
     trace.toSeq
   }
 
   /** The value of register `n` (through the debug port). */
-  def reg(c: SingleCycleSystem, n: Int): Long = {
+  def reg(c: RiscvSystem, n: Int): Long = {
     c.io.dbg.addr.poke(n.U)
     c.io.dbg.data.peek().litValue.toLong
   }
 
   /** Runs `image` on the core and on the golden model (see `load`: it must not read memory past its
-    * image that it has not written); returns the first difference between what they retire (None if
-    * they retire the same instructions).
+    * image that it has not written); returns the first difference between what
+    * they retire, or that the core did not halt in `maxCycles` cycles (None if they retire the same
+    * instructions and both halt).
     */
-  def compare(c: SingleCycleSystem, image: Seq[Long], maxCycles: Int = 100000): Option[String] = {
+  def compare(c: RiscvSystem, image: Seq[Long], maxCycles: Int = 100000): Option[String] = {
     load(c, image)
-    val core  = run(c, maxCycles)
-    val model = new IsaSim(image).run(maxCycles)
-    core.map(Some(_)).zipAll(model.map(Some(_)), None, None).zipWithIndex.collectFirst {
-      case ((a, b), i) if a != b =>
-        def show(r: Option[Retire]) = r.fold("(nothing retired)")(_.toString)
-        s"instruction $i:\n  core:  ${show(a)}\n  model: ${show(b)}"
-    }
+    val core                    = run(c, maxCycles)
+    val model                   = new IsaSim(image).run(maxCycles)
+    def show(r: Option[Retire]) = r.fold("(nothing)")(_.toString)
+    def differ(i: Int)          =
+      Some(s"instruction $i:\n  core:  ${show(core.lift(i))}\n  model: ${show(model.lift(i))}")
+    val i = core.zip(model).indexWhere { case (a, b) => a != b }
+    if (i >= 0) differ(i)
+    else if (!core.lastOption.exists(_.halt.isDefined))
+      Some(s"the core did not halt within $maxCycles cycles (it retired ${core.size} instructions)")
+    else if (core.size != model.size) differ(core.size min model.size)
+    else None
   }
 }

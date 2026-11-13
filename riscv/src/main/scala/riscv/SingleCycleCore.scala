@@ -153,13 +153,7 @@ class SingleCycleCore(resetPc: Long = Ram.base) extends Module {
 /** A core with its RAM, for tests and notebooks: the testbench writes the program through `load`
   * (with reset held), then lets the core run.
   */
-class SingleCycleSystem extends Module {
-  val io = IO(new Bundle {
-    val load   = Input(Valid(new LoadPort))
-    val retire = Output(Valid(new RetireInfo))
-    val halted = Output(Bool())
-    val dbg    = new DebugPort
-  })
+class SingleCycleSystem extends RiscvSystem {
   val core = Module(new SingleCycleCore)
   val ram  = Module(new Ram)
   ram.io.imem <> core.io.imem

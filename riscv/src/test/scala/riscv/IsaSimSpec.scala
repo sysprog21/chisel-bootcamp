@@ -2,13 +2,10 @@ package riscv
 
 import org.scalatest.flatspec.AnyFlatSpec
 
-import scala.io.Source
-import scala.util.Using
-
 class IsaSimSpec extends AnyFlatSpec {
 
   def program(name: String): Program =
-    Asm.assemble(Using.resource(Source.fromFile(s"programs/src/$name.S"))(_.mkString)) // AsmSpec: equals hex/
+    Asm.assemble(TestPrograms.source("programs/src", name)) // AsmSpec: equals hex/
 
   /** Runs `source` and returns the simulator, checking that it ends with ECALL. */
   def run(source: String): IsaSim = {

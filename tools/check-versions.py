@@ -48,6 +48,9 @@ CHECKS = [
     ("Install.md", "scala", rf"scala-kernel_{V}:"),
     ("Install.md", "almond", r"scala-kernel_[0-9.]+:([0-9.]+[0-9])"),
     ("README.md", "chisel", rf"`chisel-{V}`"),
+    ("2.8_memories.ipynb", "firtool", rf"firtool {V} builds"),  # its read-under-write findings
+    ("2.8_memories.ipynb", "firtool", rf"version {V} here"),
+    ("2.8_memories.ipynb", "chisel", rf"In Chisel {V}, `SRAM`"),  # its MemoryFile finding
 ]
 REFERENCE_FILE = "Dockerfile"
 

@@ -55,7 +55,7 @@ This README serves as *Module 0*, an introduction and motivation to learning the
 *Module 1* gives a quick introduction to Scala.
 It teaches you enough to start writing Chisel, but many more Scala concepts are taught along the way.
 Chisel is introduced in *Module 2*, starting with a hardware example and breaking it down.
-The rest of *Module 2* covers combinational and sequential logic, as well as software and hardware control flow.
+The rest of *Module 2* covers combinational and sequential logic, software and hardware control flow, testing with ChiselSim, enums, bit-pattern decoders, mixed vectors and bundle connections, and memories (including a register file).
 *Module 3* teaches you how to write hardware generators in Chisel that take advantage of Scala's high-level programming language features.
 *Module 4* looks under the hood: the FIRRTL that Chisel emits, how CIRCT's `firtool` turns it into SystemVerilog, and how to write small programs that analyze and transform FIRRTL.
 By the end, you will be able to read and understand most of the [Chisel code base](https://github.com/chipsalliance/chisel) and begin using [Rocket Chip](https://github.com/chipsalliance/rocket-chip).

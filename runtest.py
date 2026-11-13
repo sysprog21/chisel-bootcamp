@@ -121,6 +121,8 @@ notebooks: Dict[str, List[str]] = {
     "2.4_sequential_logic.ipynb": [NOT_IMPLEMENTED] * 2,
     "2.5_exercise.ipynb": [NOT_IMPLEMENTED] * 3,
     "2.6_chiselsim.ipynb": [],
+    "2.7_enums_and_bundles.ipynb": [NOT_IMPLEMENTED] * 3,
+    "2.8_memories.ipynb": [NOT_IMPLEMENTED] * 2,
     "3.1_parameters.ipynb": ["java.util.NoSuchElementException"],
     "3.2_collections.ipynb": [NOT_IMPLEMENTED],
     "3.2_interlude.ipynb": [],

@@ -109,3 +109,33 @@ independent check.
 `riscv.RandomProgram(seed)` writes a random RV32I program in assembly that halts by construction:
 branches and jumps only go forward, loads and stores stay in a 1 KB data area based on `s11`. A
 program that exposes a difference can be saved as a `.S` file and kept as a regression test.
+
+## Memory interface and the single-cycle core
+
+The cores reach memory through `MemPort` (`src/main/scala/riscv/Memory.scala`): a `Decoupled`
+request (word address, write data, byte strobes) and a `Valid` response (data, error for an
+address outside the memory). The RAM (`Ram`, 64 KB at `0x8000_0000`, constants in `object Ram`
+that `IsaSim` shares) answers in the same cycle on an instruction and a data port, and has a load
+port through which testbenches write programs while reset is held. It has a single write port: in
+Chisel 7.16 with its firtool, a `Mem` with a masked and an unmasked write port loses the mask.
+
+`SingleCycleCore` retires one instruction per cycle and depends on that same-cycle answer (it
+ignores `ready`); a bus that answers later needs a core that tracks its requests. It reports each
+retired instruction on a `Valid(RetireInfo)` port with the fields of `IsaSim`'s `Retire`, and
+`CoSim` runs a program on the core and on `IsaSim` and returns the first difference. Its tests run
+directed programs (each feature, every halt cause), the committed programs and random programs
+through `CoSim`.
+
+## The official tests
+
+`programs/riscv-tests/rv32ui/` holds the rv32ui tests of
+[riscv-tests](https://github.com/riscv-software-src/riscv-tests) (BSD license, in
+`programs/riscv-tests/LICENSE`) at a pinned revision, already expanded: they are written with C
+preprocessor macros, and the image has no compiler. `tools/import-riscv-tests.py` (run where git and
+`cpp` are available; CI runs it with `--check`) expands them against `programs/riscv-tests/riscv_test.h`,
+a test environment without CSRs: a test starts at `_start`, the first word of `.text`, and ends with
+`ECALL`, leaving `a0` = 0 if it passed, or (failing case << 1) | 1. `riscv.Asm` assembles the
+expanded files; for all of them its output is identical to GNU as and ld 2.44 with the same layout.
+`fence_i` (Zifencei) and `ma_data` (misaligned accesses, which halt the cores) are left out
+(`programs/riscv-tests/EXCLUDED`). `ComplianceSpec` runs the others on `IsaSim` and on the
+single-cycle core (through `CoSim`, so each retired instruction is compared too).

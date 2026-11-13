@@ -116,8 +116,9 @@ The cores reach memory through `MemPort` (`src/main/scala/riscv/Memory.scala`): 
 request (word address, write data, byte strobes) and a `Valid` response (data, error for an
 address outside the memory). The RAM (`Ram`, 64 KB at `0x8000_0000`, constants in `object Ram`
 that `IsaSim` shares) answers in the same cycle on an instruction and a data port, and has a load
-port through which testbenches write programs while reset is held. It has a single write port: in
-Chisel 7.16 with its firtool, a `Mem` with a masked and an unmasked write port loses the mask.
+port through which testbenches write programs while reset is held. It has a single write port:
+firtool drops the write masks of a memory that also has a write port without a mask (a constant
+all-ones mask counts as none), so a masked write would write every byte (see 2.8).
 
 `SingleCycleCore` retires one instruction per cycle and depends on that same-cycle answer (it
 ignores `ready`); a bus that answers later needs a core that tracks its requests. It reports each

@@ -88,8 +88,9 @@ object CoSim {
 
   /** Runs `image` on the core and on the golden model (see `load`: it must not read memory past its
     * image that it has not written); returns the first difference between what
-    * they retire, or that the core did not halt in `maxCycles` cycles (None if they retire the same
-    * instructions and both halt).
+    * they retire, or that the core did not halt in `maxCycles` cycles, or that it retired something
+    * in the few cycles it is run past its halt (None if they retire the same instructions and both
+    * halt).
     */
   def compare(c: RiscvSystem, image: Seq[Long], maxCycles: Int = 100000): Option[String] = {
     load(c, image)
@@ -103,6 +104,14 @@ object CoSim {
     else if (!core.lastOption.exists(_.halt.isDefined))
       Some(s"the core did not halt within $maxCycles cycles (it retired ${core.size} instructions)")
     else if (core.size != model.size) differ(core.size min model.size)
-    else None
+    else afterHalt(c)
   }
+
+  /** Nothing may retire after the instruction that halts the core: a pipeline that failed to flush
+    * a younger instruction would retire it a few cycles later (after changing memory or registers).
+    */
+  private def afterHalt(c: RiscvSystem, cycles: Int = 8): Option[String] =
+    (1 to cycles).iterator.flatMap { _ => c.clock.step(); retired(c) }.nextOption().map { r =>
+      s"an instruction retired after the one that halted the core:\n  $r"
+    }
 }

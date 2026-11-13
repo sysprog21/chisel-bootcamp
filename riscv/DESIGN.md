@@ -142,3 +142,16 @@ expanded files; for all of them its output is identical to GNU as and ld 2.44 wi
 `fence_i` (Zifencei) and `ma_data` (misaligned accesses, which halt the cores) are left out
 (`programs/riscv-tests/EXCLUDED`). `ComplianceSpec` runs the others on `IsaSim` and on the
 single-cycle core (through `CoSim`, so each retired instruction is compared too).
+
+## The five-stage pipeline
+
+`PipelinedCore` (`src/main/scala/riscv/PipelinedCore.scala`) runs IF, ID, EX, MEM and WB, with
+stage registers made by `Stage` (a `Valid` register with an enable and a flush). Jumps and branches
+are resolved in EX, and the two younger instructions are flushed when one is taken; an instruction
+that halts the core flushes all younger ones when it is in MEM, the last stage that finds a halt
+cause, so none of them changes memory or registers. Its register reads see a register that WB
+writes in the same cycle (written first, read second), but it handles no other data hazard:
+programs for it are assembled with `Asm.padded(source, 2)`, two nops after every instruction.
+`PipelineFlush` (which stage registers to flush) is the exercise. It shares `Core`, `CoreSystem`
+and `CoSim` with the single-cycle core; padded riscv-tests no longer fit their branch range, so
+the official tests run on the pipeline once it handles hazards (Module 5.7).

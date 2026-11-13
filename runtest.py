@@ -147,6 +147,7 @@ notebooks: Dict[str, List[str]] = {
     "5.3_decoder.ipynb": [NOT_IMPLEMENTED] * 4,
     "5.4_single_cycle.ipynb": [NOT_IMPLEMENTED] * 5,
     "5.5_compliance.ipynb": [NOT_IMPLEMENTED],
+    "5.6_pipeline.ipynb": [NOT_IMPLEMENTED] * 5,
 }
 
 if __name__ == "__main__":

@@ -31,15 +31,10 @@ class RetireInfo extends Bundle {
 /** A single-cycle RV32I core: each instruction is fetched, decoded, executed and retired in one
   * clock cycle, through the instruction and data ports, which must answer in the same cycle (see
   * `MemPort`: the core does not track requests). It starts at `resetPc`, and halts as DESIGN.md says.
+  * Its ports, `io` (memory ports, retire port, `halted`, register debug port), are `CoreIO`, which
+  * every core of the course has (System.scala).
   */
-class SingleCycleCore(resetPc: Long = Ram.base) extends Module {
-  val io = IO(new Bundle {
-    val imem   = new MemPort
-    val dmem   = new MemPort
-    val retire = Output(Valid(new RetireInfo))
-    val halted = Output(Bool())
-    val dbg    = new DebugPort
-  })
+class SingleCycleCore(resetPc: Long = Ram.base) extends Core {
 
   val pc     = RegInit(resetPc.U(32.W))
   val halted = RegInit(false.B)
@@ -150,16 +145,7 @@ class SingleCycleCore(resetPc: Long = Ram.base) extends Module {
   r.halt           := cause
 }
 
-/** A core with its RAM, for tests and notebooks: the testbench writes the program through `load`
-  * (with reset held), then lets the core run.
+/** The single-cycle core with its RAM, for tests and notebooks: the testbench writes the program
+  * through `load` (with reset held), then lets the core run.
   */
-class SingleCycleSystem extends RiscvSystem {
-  val core = Module(new SingleCycleCore)
-  val ram  = Module(new Ram)
-  ram.io.imem <> core.io.imem
-  ram.io.dmem <> core.io.dmem
-  ram.io.load := io.load
-  io.retire   := core.io.retire
-  io.halted   := core.io.halted
-  io.dbg <> core.io.dbg
-}
+class SingleCycleSystem extends CoreSystem(new SingleCycleCore)

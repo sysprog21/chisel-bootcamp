@@ -216,6 +216,16 @@ object Asm {
   /** The memory image of `source` assembled for address `base` (see [[Program]]). */
   def apply(source: String, base: Long = Ram.base): Seq[Long] = assemble(source, base).words
 
+  /** `source` assembled with `padding` nops after every instruction (after each of the instructions
+    * of a pseudo-instruction too): a pipeline without hazard handling then needs nothing else. Labels
+    * keep working; a branch or jump offset written as a number or relative to `.` (`j .+8`) does not
+    * account for the nops, and an instruction written as data (`.word`) gets none after it.
+    */
+  def padded(source: String, padding: Int, base: Long = Ram.base): Seq[Long] = {
+    require(padding >= 0, s"padding $padding")
+    new Assembler(source, base, padding).program.words
+  }
+
   def assemble(source: String, base: Long = Ram.base): Program = new Assembler(source, base).program
 
   /** `sbt "runMain riscv.Asm in.S out.hex"` writes the memory image of `in.S` for `$readmemh`. */
@@ -230,7 +240,7 @@ object Asm {
 /** The two passes of [[Asm]]: the first finds every statement's section and offset (so every
   * label's address), the second produces the bytes.
   */
-private final class Assembler(source: String, base: Long) {
+private final class Assembler(source: String, base: Long, padding: Int = 0) {
   private def fail(msg: String): Nothing = throw new IllegalArgumentException(msg)
 
   // ---- lexing
@@ -414,7 +424,7 @@ private final class Assembler(source: String, base: Long) {
     case d if d.startsWith(".") => fail(s"unknown directive $d")
     case _ if section != "text" => fail(s"instructions belong in .text, not .$section")
     case _ if offset % 4 != 0 => fail("instruction not on a 4-byte boundary (add .align 2 before it)")
-    case _ => 4 * expand(op, args, 0, stmts.size).size
+    case _ => 4 * instructions(op, args, 0, stmts.size).size
   }
 
   /** `(line, statement)` with each `.rept n` ... `.endr` block written out n times. The count must
@@ -651,6 +661,10 @@ private final class Assembler(source: String, base: Long) {
     v.toInt
   }
 
+  /** The instructions of a statement, each followed by `padding` nops. */
+  private def instructions(op: String, args: List[String], pc: Long, seq: Int): Seq[Inst] =
+    expand(op, args, pc, seq).flatMap(i => i +: Seq.fill(padding)(Inst("addi")))
+
   /** The I-type instruction that does what R-type `op` does, with an immediate (`sltu` -> `sltiu`). */
   private def immediateForm(op: String): String = if (op == "sltu") "sltiu" else op + "i"
 
@@ -796,7 +810,7 @@ private final class Assembler(source: String, base: Long) {
           for (o <- word until s.offset + pad by 4) put("text", o, Rv32i.encode(Inst("addi")), 4)
         }
       case op =>
-        val insts = expand(op, s.args, pc, seq)
+        val insts = instructions(op, s.args, pc, seq)
         if (4 * insts.size != s.size) fail("the expansion changed size between the passes") // a bug in expand
         for ((inst, k) <- insts.zipWithIndex) put("text", s.offset + 4 * k, Rv32i.encode(inst), 4)
     }

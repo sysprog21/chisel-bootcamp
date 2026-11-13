@@ -109,3 +109,19 @@ independent check.
 `riscv.RandomProgram(seed)` writes a random RV32I program in assembly that halts by construction:
 branches and jumps only go forward, loads and stores stay in a 1 KB data area based on `s11`. A
 program that exposes a difference can be saved as a `.S` file and kept as a regression test.
+
+## Memory interface and the single-cycle core
+
+The cores reach memory through `MemPort` (`src/main/scala/riscv/Memory.scala`): a `Decoupled`
+request (word address, write data, byte strobes) and a `Valid` response (data, error for an
+address outside the memory). The RAM (`Ram`, 64 KB at `0x8000_0000`, constants in `object Ram`
+that `IsaSim` shares) answers in the same cycle on an instruction and a data port, and has a load
+port through which testbenches write programs while reset is held. It has a single write port: in
+Chisel 7.16 with its firtool, a `Mem` with a masked and an unmasked write port loses the mask.
+
+`SingleCycleCore` retires one instruction per cycle and depends on that same-cycle answer (it
+ignores `ready`); a bus that answers later needs a core that tracks its requests. It reports each
+retired instruction on a `Valid(RetireInfo)` port with the fields of `IsaSim`'s `Retire`, and
+`CoSim` runs a program on the core and on `IsaSim` and returns the first difference. Its tests run
+directed programs (each feature, every halt cause), the committed programs and random programs
+through `CoSim`.

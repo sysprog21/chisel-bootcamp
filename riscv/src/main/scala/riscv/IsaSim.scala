@@ -40,7 +40,7 @@ case class Retire(
   *
   * The memory is one RAM of `size` bytes at `base`, holding `image` (from `Asm`) and zeros after it.
   */
-class IsaSim(image: Seq[Long], val base: Long = 0x80000000L, val size: Int = 64 * 1024) {
+class IsaSim(image: Seq[Long], val base: Long = Ram.base, val size: Int = Ram.bytes) {
   require(
     base >= 0 && base % 4 == 0 && size % 4 == 0 && size > 0 && base + size <= (1L << 32),
     "the RAM must be whole words"
@@ -127,19 +127,11 @@ class IsaSim(image: Seq[Long], val base: Long = 0x80000000L, val size: Int = 64 
       case "jal"                                           => jump(u32(pc + i.imm))
       case "jalr"                                          => jump(addr & ~1L)
       case "beq" | "bne" | "blt" | "bge" | "bltu" | "bgeu" =>
-        val taken = i.name match {
-          case "beq"  => a == b
-          case "bne"  => a != b
-          case "blt"  => a < b
-          case "bge"  => a >= b
-          case "bltu" => Integer.compareUnsigned(a, b) < 0
-          case "bgeu" => Integer.compareUnsigned(a, b) >= 0
-        }
-        if (taken) jump(u32(pc + i.imm)) else retire(pc + 4)
+        if (IsaSim.taken(i.name, a, b)) jump(u32(pc + i.imm)) else retire(pc + 4)
       case "lb" | "lh" | "lw" | "lbu" | "lhu" =>
         access(addr, bytes) {
           val raw   = bytesAt(addr, bytes)
-          val value = if (i.name.endsWith("u")) raw.toInt else Rv32i.signExtend(raw.toInt, 8 * bytes)
+          val value = IsaSim.loadValue(i.name, raw)
           retire(pc + 4, value, Some(MemAccess(addr, write = false, bytes, raw)))
         }
       case "sb" | "sh" | "sw" =>
@@ -166,6 +158,21 @@ class IsaSim(image: Seq[Long], val base: Long = 0x80000000L, val size: Int = 64 
 }
 
 object IsaSim {
+
+  /** Whether branch `name` (`beq`, ..., `bgeu`) is taken for registers `a` and `b`. */
+  def taken(name: String, a: Int, b: Int): Boolean = name match {
+    case "beq"  => a == b
+    case "bne"  => a != b
+    case "blt"  => a < b
+    case "bge"  => a >= b
+    case "bltu" => Integer.compareUnsigned(a, b) < 0
+    case "bgeu" => Integer.compareUnsigned(a, b) >= 0
+    case _      => throw new IllegalArgumentException(s"not a branch: $name")
+  }
+
+  /** The value load `name` (`lb`, ..., `lhu`) writes to rd, from the bytes it read (`raw`, zero-extended). */
+  def loadValue(name: String, raw: Long): Int =
+    if (name.endsWith("u")) raw.toInt else Rv32i.signExtend(raw.toInt, 8 * width(name))
 
   /** The size in bytes of a load or store (`lb`, `sh`, `lw`, ...). */
   def width(name: String): Int = name(1) match {

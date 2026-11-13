@@ -100,16 +100,16 @@ own. This tutorial *does not* yet cover backend flows for FPGA or ASIC processes
 ### Which path should I take?
 
 - **New to Scala:** take Module 1 in full, then Modules 2 and 3 in order. Module 4 is optional.
-- **Verilog or VHDL designer:** skim Module 1 (enough to read Scala), take Module 2 (2.6 on
-  testing and 2.7-2.8 differ most from what you know), then Module 3 for what Verilog cannot do:
-  generators.
-- **Here for the RISC-V processor:** Module 1, what Module 5 assumes (below), then Module 5 in
-  order. Module 4 and the rest of Module 3 are optional for it.
+- **Verilog or VHDL designer:** read the sections of Module 1 tagged *Required* (enough to read
+  Scala), take Module 2 (2.6 on testing and 2.7-2.8 differ most from what you know), then Module 3
+  for what Verilog cannot do: generators.
+- **Here for the RISC-V processor:** Module 1 (at least its *Required* sections), what Module 5
+  assumes (below), then Module 5 in order. Module 4 and the rest of Module 3 are optional for it.
 
-Module 5 assumes Module 2 (2.6-2.8 especially: testing, decoders and enums, memories),
-3.2_interlude (`Decoupled`) and 3.3 (the collection methods), and knowing what a processor's
-datapath is (a computer architecture course, or a book such as Patterson and Hennessy's
-*Computer Organization and Design*); it explains RV32I itself.
+Module 5 assumes Module 2 (2.6-2.8 especially: testing, decoders and enums, memories), 3.1
+(`match`, `Option`, case classes), 3.2_interlude (`Decoupled`) and 3.3 (the collection methods),
+and knowing what a processor's datapath is (a computer architecture course, or a book such as
+Patterson and Hennessy's *Computer Organization and Design*); it explains RV32I itself.
 
 ## Motivation
 All hardware description languages support writing single instances.

@@ -125,3 +125,17 @@ retired instruction on a `Valid(RetireInfo)` port with the fields of `IsaSim`'s 
 `CoSim` runs a program on the core and on `IsaSim` and returns the first difference. Its tests run
 directed programs (each feature, every halt cause), the committed programs and random programs
 through `CoSim`.
+
+## The official tests
+
+`programs/riscv-tests/rv32ui/` holds the rv32ui tests of
+[riscv-tests](https://github.com/riscv-software-src/riscv-tests) (BSD license, in
+`programs/riscv-tests/LICENSE`) at a pinned revision, already expanded: they are written with C
+preprocessor macros, and the image has no compiler. `tools/import-riscv-tests.py` (run where git and
+`cpp` are available; CI runs it with `--check`) expands them against `programs/riscv-tests/riscv_test.h`,
+a test environment without CSRs: a test starts at `_start`, the first word of `.text`, and ends with
+`ECALL`, leaving `a0` = 0 if it passed, or (failing case << 1) | 1. `riscv.Asm` assembles the
+expanded files; for all of them its output is identical to GNU as and ld 2.44 with the same layout.
+`fence_i` (Zifencei) and `ma_data` (misaligned accesses, which halt the cores) are left out
+(`programs/riscv-tests/EXCLUDED`). `ComplianceSpec` runs the others on `IsaSim` and on the
+single-cycle core (through `CoSim`, so each retired instruction is compared too).

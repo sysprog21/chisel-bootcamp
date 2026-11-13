@@ -205,6 +205,7 @@ case class Program(base: Long, words: IndexedSeq[Long], symbols: Map[String, Lon
   *     `call`, `tail`, and loads and stores of a symbol (`lw rd, symbol` and `sw rs, symbol, rt`,
   *     through `auipc`).
   *
+  * It assembles the rv32ui tests of riscv-tests (riscv/programs/riscv-tests) exactly as GNU as does.
   * A branch or jump target that uses a symbol is an address; a plain number is an offset from the
   * instruction (`beq a0, a1, 8` skips one instruction). GNU as reads a plain number as an address
   * instead; the course's programs use labels, which mean the same in both. Execution starts at the

@@ -48,6 +48,7 @@ RISCV_INPUTS = [
     "riscv/src/main/*",
     "riscv/programs/hex/*",
     "riscv/programs/src/*",
+    "riscv/programs/riscv-tests/*",
 ]
 
 

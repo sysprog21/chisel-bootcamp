@@ -1,0 +1,2 @@
+fence_i: FENCE.I belongs to Zifencei, not RV32I
+ma_data: misaligned accesses halt the course's cores (no trap handler without CSRs)

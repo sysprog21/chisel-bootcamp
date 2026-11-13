@@ -37,3 +37,5 @@ jobs:
           python3 tools/format-scala.py --check --scalafmt "$RUNNER_TEMP/scalafmt"
       - name: Notebook lint (each rule is first checked against a seeded violation)
         run: python3 tests/test_notebooks.py --self-test
+      - name: The imported riscv-tests match their pinned revision (expanded with the runner's cpp)
+        run: python3 tools/import-riscv-tests.py --check

@@ -155,3 +155,14 @@ programs for it are assembled with `Asm.padded(source, 2)`, two nops after every
 `PipelineFlush` (which stage registers to flush) is the exercise. It shares `Core`, `CoreSystem`
 and `CoSim` with the single-cycle core; padded riscv-tests no longer fit their branch range, so
 the official tests run on the pipeline once it handles hazards (Module 5.7).
+
+## Hazards
+
+`ForwardingCore` (`src/main/scala/riscv/ForwardingCore.scala`) is the pipeline with its hazards
+handled, so programs need no nops: EX takes its operands through `Forward` (EX/MEM first, then
+MEM/WB, never for x0; the exercise), a load followed by a use of its value stalls one cycle
+(`loadUse`), and while the data memory has not answered the whole pipeline holds (`memWait`; EX
+keeps its forwarded operands, and redirects wait; the instruction memory must still answer in the
+same cycle). It passes the rv32ui tests unchanged. `CoSim.timed` counts cycles: ForwardingSpec
+prints the CPI of the Fibonacci and factorial programs and checks that it beats the padded 5.6
+pipeline. The memory-wait path is tested with a data memory that answers two cycles late.

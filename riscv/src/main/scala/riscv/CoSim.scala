@@ -66,7 +66,12 @@ object CoSim {
     * `maxCycles` cycles; returns what retired (in order). A core may retire nothing in a cycle (a
     * pipeline filling up, a stall), but at most one instruction.
     */
-  def run(c: RiscvSystem, maxCycles: Int = 100000): Seq[Retire] = {
+  def run(c: RiscvSystem, maxCycles: Int = 100000): Seq[Retire] = timed(c, maxCycles)._1
+
+  /** As `run`, and the number of cycles the program took: from the first cycle after reset to the one
+    * in which the halting instruction retired, both included.
+    */
+  def timed(c: RiscvSystem, maxCycles: Int = 100000): (Seq[Retire], Int) = {
     val trace  = mutable.ArrayBuffer[Retire]()
     var cycles = 0
     var done   = false
@@ -77,7 +82,7 @@ object CoSim {
       if (!done) c.clock.step() // stay on the halt: the registers can be read
       cycles += 1
     }
-    trace.toSeq
+    (trace.toSeq, cycles)
   }
 
   /** The value of register `n` (through the debug port). */

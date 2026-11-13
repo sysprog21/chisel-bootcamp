@@ -6,6 +6,16 @@ import chisel3.util._
 /** The instruction formats that have an immediate (R-type has none). */
 object ImmFormat extends ChiselEnum {
   val I, S, B, U, J = Value
+
+  /** The immediate format of an instruction format (R-type has no immediate). */
+  def of(format: Format): Option[Type] = format match {
+    case Format.R => None
+    case Format.I => Some(I)
+    case Format.S => Some(S)
+    case Format.B => Some(B)
+    case Format.U => Some(U)
+    case Format.J => Some(J)
+  }
 }
 
 /** The immediate generator: extracts the immediate of `inst` for its format, sign-extended to 32

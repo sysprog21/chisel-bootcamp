@@ -88,9 +88,20 @@ object Instructions {
     * bits wherever the pattern does not care (registers, immediates).
     */
   def random(name: String, rnd: scala.util.Random): Long = {
-    val pattern = all.find(_._1 == name).getOrElse(throw new IllegalArgumentException(s"no instruction $name"))._2
-    (rnd.nextLong() & ~pattern.mask.toLong | pattern.value.toLong) & 0xffffffffL
+    val p = pattern(name)
+    (rnd.nextLong() & ~p.mask.toLong | p.value.toLong) & 0xffffffffL
   }
+
+  /** `random(name)` with one of the bits its pattern fixes flipped: a word that is close to the
+    * instruction, and usually not an RV32I instruction at all.
+    */
+  def nearMiss(name: String, rnd: scala.util.Random): Long = {
+    val fixed = (0 until 32).filter(pattern(name).mask.testBit)
+    random(name, rnd) ^ (1L << fixed(rnd.nextInt(fixed.size)))
+  }
+
+  private def pattern(name: String): BitPat =
+    all.find(_._1 == name).getOrElse(throw new IllegalArgumentException(s"no instruction $name"))._2
 
   /** All 40 RV32I instructions (FENCE.I belongs to Zifencei, not RV32I). */
   val all: Seq[(String, BitPat)] = Seq(

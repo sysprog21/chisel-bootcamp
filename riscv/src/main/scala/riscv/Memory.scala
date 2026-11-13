@@ -77,8 +77,8 @@ class Ram(words: Int = Ram.bytes / 4, base: Long = Ram.base) extends Module {
     port.resp.bits.error := !inRam(port.req.bits.addr)
   }
   // One write port, shared by the load port (all four bytes) and the core's stores (the strobed
-  // bytes). Two write ports, one of them without a mask, would lose the other's mask: with Chisel
-  // 7.16 and its firtool, a masked write then writes every byte.
+  // bytes): firtool drops the masks of a memory whose other write port has no mask (a constant
+  // all-ones mask counts as none), and a masked write then writes every byte (see 2.8).
   val store = io.dmem.req.valid && io.dmem.req.bits.wstrb.orR && inRam(io.dmem.req.bits.addr)
   val wreq  = Mux(io.load.valid, io.load.bits.addr, io.dmem.req.bits.addr)
   val wdata = Mux(io.load.valid, io.load.bits.data, io.dmem.req.bits.wdata)

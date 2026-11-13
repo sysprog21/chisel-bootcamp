@@ -11,6 +11,7 @@ import itertools
 import json
 import os
 import queue
+import re
 import subprocess
 import sys
 import time
@@ -24,6 +25,10 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 CELL_TIMEOUT = int(os.environ.get("BOOTCAMP_CELL_TIMEOUT", "600"))
 
 NOT_IMPLEMENTED = "scala.NotImplementedError"
+# A deprecated API makes the kernel print a deprecation warning (see `source/load-ivy.sc`); it is
+# reported as an error so that deprecations do not creep back in. Notebooks must therefore not
+# print the word themselves.
+DEPRECATION = re.compile(r"^.*\bdeprecat.*$", re.IGNORECASE | re.MULTILINE)
 COMPILATION_FAILED = "Compilation Failed"
 
 
@@ -62,7 +67,10 @@ def _notebook_run(path: str) -> List[Tuple[int, str]]:
                     break
                 if msg["parent_header"].get("msg_id") != msg_id:
                     continue
-                if msg["msg_type"] == "error":
+                if msg["msg_type"] == "stream":
+                    errors += [(index, "Deprecation: " + m.group(0).strip())
+                               for m in DEPRECATION.finditer(msg["content"]["text"])]
+                elif msg["msg_type"] == "error":
                     content = msg["content"]
                     errors.append((index, "{}: {}".format(content["ename"], content["evalue"])))
                 elif msg["msg_type"] == "status" and msg["content"]["execution_state"] == "idle":

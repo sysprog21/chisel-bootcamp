@@ -6,6 +6,9 @@ import $plugin.$ivy.`org.chipsalliance:::chisel-plugin:7.16.0`
 //   only accepts with the reflectiveCalls language feature.
 // * Chisel 7's dependencies put Scala 3 (TASTy) classes on the classpath; without
 //   -Ytasty-reader, e.g. `import scala.util.Random` fails with "Missing dependency ... TASTy".
+// * Deprecations: the kernel prints a warning that names each deprecated call in a cell, and
+//   runtest.py fails on it. Code in this file only gets a summary line ("1 deprecation ...;
+//   re-run enabling -deprecation for details"), and adding -deprecation here changes nothing.
 interp.configureCompiler(_.settings.processArguments(List("-language:reflectiveCalls", "-Ytasty-reader"), processAll = true))
 
 // Uncomment and change to use proxy
@@ -229,14 +232,12 @@ def firrtlToDot(firrtlString: String): String = {
 
 // Draw the circuit with Graphviz (`dot`). Falls back to printing the FIRRTL without Graphviz.
 def visualize(gen: () => chisel3.RawModule): Unit = {
-  import almond.api.helpers.Display
-
   val firrtlString = getFirrtl(gen())
   val svg =
     try Some(os.proc("dot", "-Tsvg").call(stdin = firrtlToDot(firrtlString), check = false)).filter(_.exitCode == 0).map(_.out.text())
     catch { case _: java.io.IOException => None }
   svg.filter(_.nonEmpty) match {
-    case Some(html) => Display.html(html)
+    case Some(html) => almond.display.Html(html).display()
     case None =>
       println("Graphviz (`dot`) is not available; showing the FIRRTL instead.")
       println(firrtlString)

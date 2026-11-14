@@ -63,7 +63,7 @@ class DebugSpec extends AnyFlatSpec with ChiselSim {
   }
 
   "Formal.prove" should "prove the forwarding unit, and give a counterexample for the seeded bug" in {
-    assume(Formal.available, "yosys is not on the PATH")
+    assume(Yosys.available, "yosys is not on the PATH")
     assert(Formal.prove(new ForwardCheck(new Forward)).isEmpty)
     val cex                 = Formal.prove(new ForwardCheck(new OldestFirst)).get
     def value(name: String) = cex.linesIterator.find(_.startsWith(s"\\io_$name ")).get.split("\\s+")(1).toLong

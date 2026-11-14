@@ -9,6 +9,7 @@ Rules:
               in tests/lint-allowlist.txt
   registered  every notebook is in `notebooks` of runtest.py, and every entry there exists
   outline     every notebook is in the README's outline table, with an estimated time
+  troubleshooting  every notebook with a Setup section links docs/troubleshooting.md
 
 Usage: tests/test_notebooks.py [--self-test]
   --self-test seeds one violation per rule into a copy of the notebooks and checks that each
@@ -183,6 +184,19 @@ def check_outline(root):
     ] + [f"README.md: the outline table lists {n}, which does not exist" for n in sorted(timed - set(present))]
 
 
+TROUBLESHOOTING = "](docs/troubleshooting.md)"
+
+
+def check_troubleshooting(root):
+    setup, linked = set(), set()
+    for name, _, source in markdown_cells(root):
+        if "## Setup" in source:
+            setup.add(name)
+        if TROUBLESHOOTING in source:
+            linked.add(name)
+    return [f"{n}: no link to docs/troubleshooting.md (put it under ## Setup)" for n in sorted(setup - linked)]
+
+
 RULES = {
     "links": check_links,
     "images": check_images,
@@ -190,6 +204,7 @@ RULES = {
     "removed-api": check_removed_apis,
     "registered": check_registered,
     "outline": check_outline,
+    "troubleshooting": check_troubleshooting,
 }
 
 
@@ -220,6 +235,12 @@ SEEDS = {
     "removed-api": _append("`import chisel3.iotesters.{PeekPokeTester, Driver}`"),
     "registered": lambda r: shutil.copy(os.path.join(r, "0_demo.ipynb"), os.path.join(r, "9_unregistered.ipynb")),
     "outline": lambda r: shutil.copy(os.path.join(r, "0_demo.ipynb"), os.path.join(r, "9_not_outlined.ipynb")),
+    "troubleshooting": lambda r: _edit_cell(
+        r,
+        "2.1_first_module.ipynb",
+        2,
+        lambda s: s.replace("[Troubleshooting](docs/troubleshooting.md)", "Troubleshooting"),
+    ),
 }
 
 
@@ -231,7 +252,8 @@ def self_test():
                 os.path.join(ROOT, f) for f in ("runtest.py", "README.md")
             ]:
                 shutil.copy(p, tmp)
-            shutil.copytree(os.path.join(ROOT, "images"), os.path.join(tmp, "images"))
+            for d in ("images", "docs"):  # targets of the notebooks' local links
+                shutil.copytree(os.path.join(ROOT, d), os.path.join(tmp, d))
             os.makedirs(os.path.join(tmp, "tests"))
             shutil.copy(os.path.join(ROOT, ALLOWLIST), os.path.join(tmp, ALLOWLIST))
             if RULES[rule](tmp):  # the copy already fails: the real run below shows why

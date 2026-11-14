@@ -1,6 +1,7 @@
 .git
 .gitignore
 *.md
+!Install.md
 *.patch
 .ipynb_checkpoints
 **/.ipynb_checkpoints

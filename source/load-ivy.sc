@@ -41,9 +41,22 @@ def scrub[T](body: => T): T =
       throw e
   }
 
-// Convenience function to invoke Chisel and grab emitted SystemVerilog.
-def getVerilog(dut: => chisel3.RawModule): String =
-  scrub(circt.stage.ChiselStage.emitSystemVerilog(dut))
+// Convenience function to invoke Chisel and grab emitted SystemVerilog. Chisel 7 puts assertions
+// in verification layers, extra files that follow the module (after a `// ----- 8< ----- FILE`
+// line each, as firtool 1.160 writes them: recheck when FIRTOOL_VERSION changes); those of a
+// module without assertions only hold include guards, and are then left out (all of them; one with
+// an assertion keeps them all, as they include each other).
+def getVerilog(dut: => chisel3.RawModule): String = {
+  val sv                       = scrub(circt.stage.ChiselStage.emitSystemVerilog(dut))
+  val marker                   = "// ----- 8< ----- FILE"
+  val parts                    = sv.split(s"(?m)^(?=${java.util.regex.Pattern.quote(marker)})")
+  def guardsOnly(part: String) = part.linesIterator.drop(1).map(_.trim).forall { l =>
+    l.isEmpty || l.startsWith("`ifndef") || l.startsWith("`define") || l.startsWith("`endif") ||
+    l.startsWith("`include") || l.startsWith("//")
+  }
+  val (layers, design) = parts.partition(_.startsWith(marker))
+  (if (layers.forall(guardsOnly)) design else parts).mkString.stripTrailing + "\n"
+}
 
 // Convenience function to invoke Chisel and grab emitted FIRRTL.
 def getFirrtl(dut: => chisel3.RawModule): String =

@@ -182,3 +182,23 @@ takes memory-mapped `Device`s (`UartModel` sends at once; each `RiscvSystem` giv
 model, `SocSystem` with the UART), so `CoSim.compare` checks `programs/src/hello.S` instruction by
 instruction, and `UartReceiver` decodes `txd` in software. A program that reads the UART's status
 cannot be compared that way: the model's UART is never busy.
+
+## Debugging and verification
+
+Module 5.9 plants bugs in the forwarding unit (`ForwardingCore(forwardUnit = ...)` builds the core
+with another `Forward`) and finds them three ways. Each `Retire` prints as a line of a trace,
+disassembled by `Rv32i.disassemble` (as `objdump -M no-aliases` does, near enough; its output `Asm`
+assembles back to the same word, tested on every instruction of the programs but `fence`, which it
+shows without operands), so `CoSim.compare`'s messages name the instruction that differs and what it
+did. `Vcd` reads the VCD file (binary search per signal, so long tables stay fast) of `simulate(...,
+waves = ...)`, so a notebook can print signals per cycle without a waveform viewer. `Formal.prove`
+emits a check module (`ForwardCheck.scala`: a unit next to its specification, written with
+last-connect `when`s rather than a `MuxCase`, with an output `ok`) and runs Yosys's `sat -prove` on
+it: a proof for every input of a combinational module, or a counterexample (a module with registers
+would need `sat -seq`, and a different table parser). The formal flow was chosen after a spike:
+stable Alpine has no Yosys (edge's needs edge's Python), firtool's jar ships no `circt-bmc`, and
+building Yosys in the image would take hours under QEMU for Arm64, while YoWASP's Yosys
+(WebAssembly, run by wasmtime, with musl wheels for x86-64 and Arm64) installs with pip (pinned with
+its runtime and wasmtime) and adds about 115 MB. Its first run in a container compiles the
+WebAssembly (about a minute); the compiled cache (220 MB) is not baked into the image. SymbiYosys
+(multi-cycle BMC and induction) is not installed.

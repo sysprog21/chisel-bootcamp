@@ -11,6 +11,9 @@ ARG TARGETARCH
 # calls need --no-cache (or a fresh index) so that the @edge tag still resolves.
 # On Arm64, firtool (an x86-64 executable, see the intermediate-builder stage) runs
 # through qemu-user.
+# Yosys (for the formal check of 5.10) is not packaged for stable Alpine; YoWASP's build is Yosys
+# compiled to WebAssembly, run by wasmtime (wheels for musl on x86-64 and Arm64), and installed as
+# `yosys`. It adds about 115 MB; its first run in a container compiles it (about a minute).
 RUN \
     echo "@edge https://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories && \
     apk add --no-cache \
@@ -33,7 +36,9 @@ RUN \
         linux-headers \
         python3-dev \
         && \
-    pip3 install --no-cache-dir --break-system-packages jupyter jupyterlab && \
+    pip3 install --no-cache-dir --break-system-packages jupyter jupyterlab \
+        yowasp-yosys==0.71.0.0.post1285 yowasp-runtime==1.96 wasmtime==47.0.1 && \
+    ln -s "$(command -v yowasp-yosys)" /usr/local/bin/yosys && \
     find /usr/lib/python3.12 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/lib/python3.12 -type f -name '*.pyc' -delete && \
     find /usr/lib/python3.12 -type f -name '*.pyo' -delete && \

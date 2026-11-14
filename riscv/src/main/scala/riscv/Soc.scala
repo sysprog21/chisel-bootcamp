@@ -8,11 +8,12 @@ import chisel3.simulator.PeekPokeAPI._
   * same cycle, as `ForwardingCore` needs). `txd` is the UART's serial output.
   */
 class SocSystem(val divider: Int = 4) extends RiscvSystem {
-  val txd  = IO(Output(Bool()))
-  val core = Module(new ForwardingCore)
-  val ram  = Module(new Ram)
-  val uart = Module(new Uart(divider))
-  val bus  = Module(new Bus(Seq(Region(Ram.base, Ram.bytes), Region(Uart.base, Uart.bytes))))
+  val txd    = IO(Output(Bool()))
+  val core   = Module(new ForwardingCore)
+  val ram    = Module(new Ram)
+  val uart   = Module(new Uart(divider))
+  val memory = Region(Ram.base, Ram.bytes)
+  val bus    = Module(new Bus(Seq(memory, Region(Uart.base, Uart.bytes))))
   ram.io.imem <> core.io.imem
   bus.io.master <> core.io.dmem
   ram.io.dmem <> bus.io.devices(0)

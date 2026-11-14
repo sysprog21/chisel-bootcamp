@@ -15,8 +15,10 @@ import chisel3.util._
   *   - a data memory that answers late: while the access in MEM waits, the whole pipeline holds,
   *     and WB gets bubbles. The instruction memory must answer in the same cycle (a slow fetch
   *     needs a core that keeps its fetch request across a redirect).
+  *
+  * `forwardUnit` builds each of the two forwarding units (Module 5.9 passes one with a bug).
   */
-class ForwardingCore(resetPc: Long = Ram.base) extends Core {
+class ForwardingCore(resetPc: Long = Ram.base, forwardUnit: => Forward = new Forward) extends Core {
   val stopped                            = RegInit(false.B) // a halting instruction has passed MEM: fetch no more
   val halted                             = RegInit(false.B)
   val flush                              = Module(new PipelineFlush)
@@ -90,7 +92,7 @@ class ForwardingCore(resetPc: Long = Ram.base) extends Core {
   val fromExMem                               = Wire(Valid(new Result))
   val fromMemWb                               = Wire(Valid(new Result))
   def forward(rs: UInt, regValue: UInt): UInt = {
-    val f = Module(new Forward)
+    val f = Module(forwardUnit)
     f.io.rs       := rs
     f.io.regValue := regValue
     f.io.exMem    := fromExMem

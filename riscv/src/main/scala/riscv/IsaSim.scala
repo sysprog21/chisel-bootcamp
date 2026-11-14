@@ -31,7 +31,24 @@ case class Retire(
     rdValue: Long = 0,
     mem: Option[MemAccess] = None,
     halt: Option[Halt] = None
-)
+) {
+
+  /** One line of a trace: the pc, the instruction, and what it did, e.g.
+    * `80000008  00a50513  addi a0, a0, 10          a0 <- 0x0000000f`.
+    */
+  override def toString: String = {
+    val effects = Seq(
+      Option.when(rd != 0)(f"${Reg.names(rd)} <- 0x$rdValue%08x"),
+      mem.map { m =>
+        val arrow = if (m.write) "<-" else "->"
+        f"mem[0x${m.addr}%08x] $arrow 0x${m.data}%x (${m.bytes} bytes)"
+      },
+      Option.when(halt.isEmpty && nextPc != ((pc + 4) & 0xffffffffL))(f"pc <- 0x$nextPc%08x"),
+      halt.map(h => s"halt: $h")
+    ).flatten
+    f"$pc%08x  $inst%08x  ${Rv32i.disassemble(inst, pc)}%-24s ${effects.mkString(", ")}".trim
+  }
+}
 
 /** The golden model: an RV32I interpreter that executes one instruction per `step` and reports it
   * as a [[Retire]] record, for comparison with the cores' retire ports. It is a teaching oracle

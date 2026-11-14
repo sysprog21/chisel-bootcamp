@@ -52,3 +52,24 @@ class Bus(regions: Seq[Region]) extends Module {
   io.master.resp.bits.error := unmapped || answer.bits.error
   when(io.master.resp.valid)(busy := false.B)
 }
+
+/** A slower memory: passes each request to `out` only after it has waited `latency` cycles, as a
+  * DRAM would make it wait, then holds it until `out` answers (the tests of `ForwardingCore` use it
+  * to check that the pipeline waits for a slow data memory). It takes the request (`in.req.ready`) only with that answer, so a master that
+  * sends a request once (`ForwardingCore`) does not drop it while a slow device keeps it waiting.
+  */
+class Delay(latency: Int) extends Module {
+  require(latency >= 0)
+  val io = IO(new Bundle {
+    val in  = Flipped(new MemPort)
+    val out = new MemPort
+  })
+  val waited = RegInit(0.U(log2Ceil(latency + 1).max(1).W))
+  val go     = io.in.req.valid && waited === latency.U
+  when(!io.in.req.valid || io.out.resp.valid)(waited := 0.U).elsewhen(!go)(waited := waited + 1.U)
+  io.out.req.valid := go
+  io.out.req.bits := io.in.req.bits
+  io.in.req.ready := go && io.out.resp.valid
+  io.in.resp.valid := go && io.out.resp.valid
+  io.in.resp.bits := io.out.resp.bits
+}

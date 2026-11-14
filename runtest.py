@@ -13,6 +13,7 @@ import json
 import os
 import queue
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -150,6 +151,9 @@ notebooks: Dict[str, List[str]] = {
     "5.6_pipeline.ipynb": [NOT_IMPLEMENTED] * 5,
     "5.7_hazards.ipynb": [NOT_IMPLEMENTED] * 4,
     "5.8_bus_and_mmio.ipynb": [NOT_IMPLEMENTED] * 3,
+    # without Yosys, the formal check of the `Forward` exercise prints a note instead of building it
+    "5.9_debug_and_verify.ipynb": [NOT_IMPLEMENTED]
+    * (6 if shutil.which("yosys") or shutil.which("yowasp-yosys") else 5),
 }
 
 if __name__ == "__main__":

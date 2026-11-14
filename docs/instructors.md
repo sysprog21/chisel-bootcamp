@@ -70,8 +70,11 @@ tag to keep a term on one release; the README lists the tags).
   measurements).
 - **CPU: 2 cores per student.** Verilator builds in parallel, so more cores speed up Module 5; one
   core works but is slower. The first Yosys cell in a container (5.9, 5.10) takes about a minute.
-- **Disk:** the image is about 1.2 GB; each container writes little (`build/` holds simulation
-  output).
+- **Disk:** the image is about 0.65 GB (amd64; Arm64 about 0.75 GB); each container writes little
+  (`build/` holds simulation output).
+- **An image of your own on top of it:** to keep it small, the image deletes files of some Alpine
+  packages it keeps installed (Perl, Graphviz's image plugins and libraries, parts of GCC), so run
+  `apk fix --no-cache $(cat /etc/bootcamp-pruned)` before `apk add` in your Dockerfile.
 - **Arm64 machines** run the image too, with `firtool` under emulation (slower to build
   SystemVerilog).
 

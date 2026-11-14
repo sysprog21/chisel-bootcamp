@@ -66,8 +66,9 @@ def getFirrtl(dut: => chisel3.RawModule): String =
 // runs `body` against it. Two differences and two options, so that the notebooks stay short:
 //  * errors go through `scrub`;
 //  * a `Module` is reset for one clock cycle before `body` runs, like chiseltest's `test`
-//    did. (ChiselSim itself leaves the reset to you: until it is asserted, registers hold
-//    random values.)
+//    did, and like the `simulate` of ChiselSim's ScalaTest trait. (`simulateRaw`, which this one
+//    calls, and EphemeralSimulator's `simulate` leave the reset to you: until it is asserted,
+//    registers hold random values.)
 //  * the option `randomization` chooses the initial values of registers and memories. ChiselSim's
 //    default randomizes both; `Randomization.random.copy(memories = false)` leaves memories alone,
 //    which a memory loaded from a file needs (the random values would overwrite its contents).

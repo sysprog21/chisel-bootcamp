@@ -202,6 +202,7 @@ everything the project needs are preinstalled, so it works offline. Open a termi
 cd riscv
 sbt test               # compile and run every test (ChiselSim tests need Verilator)
 sbt "testOnly riscv.IsaSpec"
+sbt "testOnly riscv.MemorySpec -- -DemitVcd=1"   # also dump each simulation's waveform (VCD) under build/
 # assemble a test program into the memory image that the processors load
 sbt "runMain riscv.Asm programs/src/fib.S programs/hex/fib.hex"
 ```

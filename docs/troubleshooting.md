@@ -75,8 +75,23 @@ and import _root_.almond.input.Input
 **Why:** the Verilator on the `PATH` is older than version 5 (this text is from 4.210), and ChiselSim
 passes it options of Verilator 5.
 
-**Fix:** install Verilator 5 or newer, as [Install.md](../Install.md#verilator) describes, or use the
-Docker image.
+**Fix:** install Verilator 5.026 or newer, as [Install.md](../Install.md#verilator) describes, or use
+the Docker image.
+
+## `%Error: Internal Error: attempted to destroy locked Thread Pool`
+
+**What you see:** a simulation fails while ChiselSim compiles it, now and then (running it again may
+work), and the compilation log has:
+
+```
+%Error: Internal Error: attempted to destroy locked Thread Pool
+%Error: Verilator aborted. Suggest trying --debug --gdbbt
+```
+
+**Why:** a bug of Verilator before 5.026 (reported on 5.020, which Ubuntu 24.04 ships).
+
+**Fix:** use Verilator 5.026 or newer; on Ubuntu, `tools/install.sh` builds one when the system's is
+older.
 
 ## `Killed`, or the kernel dies, while simulating
 

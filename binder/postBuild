@@ -5,15 +5,16 @@ SCALA_VERSION=2.13.18
 ALMOND_VERSION=0.14.5
 COURSIER_VERSION=2.1.24
 
-# Chisel 7 simulates with ChiselSim, which needs Verilator 5 or newer
+# Chisel 7 simulates with ChiselSim, which needs a recent Verilator (older ones abort now and then)
+VERILATOR_MIN=5.026
 command -v verilator >/dev/null || {
     echo "ERROR: verilator not found" >&2
     exit 1
 }
-VERILATOR=$(verilator --version)
-echo "$VERILATOR"
-[ "$(echo "$VERILATOR" | sed -E 's/^Verilator ([0-9]+).*/\1/')" -ge 5 ] || {
-    echo "ERROR: Verilator 5 or newer is required" >&2
+VERILATOR=$(verilator --version | awk '{print $2}')
+echo "Verilator $VERILATOR"
+[ "$(printf '%s\n%s\n' "$VERILATOR_MIN" "$VERILATOR" | sort -V | head -1)" = "$VERILATOR_MIN" ] || {
+    echo "ERROR: Verilator $VERILATOR_MIN or newer is required" >&2
     exit 1
 }
 

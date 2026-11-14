@@ -1,0 +1,51 @@
+name: Install
+
+# The non-Docker install (tools/install.sh) on a clean Ubuntu, then a notebook on it: a change that
+# breaks the install fails here. Weekly too, as apt, PyPI and the downloads change on their own.
+on:
+  push:
+    branches: [dev]
+    paths: [tools/install.sh, source/**, runtest.py, 2.1_first_module.ipynb, .github/workflows/install.yml]
+  pull_request:
+    branches: [dev]
+    paths: [tools/install.sh, source/**, runtest.py, 2.1_first_module.ipynb, .github/workflows/install.yml]
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: install-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: tools/install.sh on Ubuntu 24.04
+    runs-on: ubuntu-24.04
+    # a bare Ubuntu, not the runner's image, which already has many of the packages
+    container: ubuntu:24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verilator version to build
+        id: verilator
+        run: echo "version=$(sed -n 's/^VERILATOR_VERSION=//p' tools/install.sh)" >>"$GITHUB_OUTPUT"
+      # the Verilator that the script builds (Ubuntu 24.04's is too old) takes minutes: reuse it,
+      # but for the weekly run, which tests the build itself
+      - name: Cache the built Verilator
+        if: github.event_name != 'schedule'
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/share/chisel-bootcamp/verilator-${{ steps.verilator.outputs.version }}
+          key: verilator-${{ steps.verilator.outputs.version }}-ubuntu24.04
+      - name: Install
+        run: tools/install.sh
+      - name: Run a notebook
+        run: |
+          . "$HOME/.local/share/chisel-bootcamp/venv/bin/activate"
+          python3 runtest.py 2.1_first_module.ipynb

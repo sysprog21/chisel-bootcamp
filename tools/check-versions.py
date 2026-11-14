@@ -27,6 +27,8 @@ CHISEL_SOURCES = "org/chipsalliance/chisel_2.13/{v}/chisel_2.13-{v}-sources.jar"
 # (file, version key, regular expression whose group 1 is the version). A file may list a key
 # several times: every occurrence must match. Each pattern must match at least once.
 V = r"([0-9]+(?:\.[0-9]+)+)"
+VP = r"([0-9]+(?:\.[0-9]+)+(?:\.post[0-9]+)?)"  # a PyPI version, which may have a .postN suffix
+SHA256 = r"([0-9a-f]{64})"
 CHECKS = [
     ("Dockerfile", "scala", rf"^ENV SCALA_VERSION={V}$"),
     ("Dockerfile", "almond", rf"^ENV ALMOND_VERSION={V}$"),
@@ -42,6 +44,26 @@ CHECKS = [
     ("source/load-ivy.sc", "chisel", rf"chisel-plugin:{V}`"),
     ("source/load-ivy.sc", "chisel", rf"org\.chipsalliance::chisel:{V}`"),
     ("source/load-ivy.sc", "scalatest", rf"org\.scalatest::scalatest:{V}`"),
+    ("tools/install.sh", "scala", rf"^SCALA_VERSION={V}$"),
+    ("tools/install.sh", "almond", rf"^ALMOND_VERSION={V}$"),
+    ("tools/install.sh", "coursier", rf"^COURSIER_VERSION={V}$"),
+    ("tools/install.sh", "sbt", rf"^SBT_VERSION={V}$"),
+    ("Dockerfile", "sbt-sha256", rf"^ENV SBT_SHA256={SHA256}$"),
+    ("tools/install.sh", "sbt-sha256", rf"^SBT_SHA256={SHA256}$"),
+    ("Dockerfile", "yowasp-yosys", rf"yowasp-yosys=={VP}"),
+    ("tools/install.sh", "yowasp-yosys", rf"^YOWASP_YOSYS_VERSION={VP}$"),
+    ("Dockerfile", "yowasp-runtime", rf"yowasp-runtime=={V}"),
+    ("tools/install.sh", "yowasp-runtime", rf"^YOWASP_RUNTIME_VERSION={V}$"),
+    ("Dockerfile", "wasmtime", rf"wasmtime=={V}"),
+    ("tools/install.sh", "wasmtime", rf"^WASMTIME_VERSION={V}$"),
+    # the oldest Verilator that works with ChiselSim (older ones abort, see docs/troubleshooting.md)
+    ("Dockerfile", "verilator-min", rf"Verilator {V} or newer"),
+    ("tools/install.sh", "verilator-min", rf"^VERILATOR_MIN={V}$"),
+    ("binder/postBuild", "verilator-min", rf"^VERILATOR_MIN={V}$"),
+    ("binder/environment.yml", "verilator-min", rf"verilator >={V}"),
+    ("Install.md", "verilator-min", rf"Verilator {V} or newer"),
+    ("docs/troubleshooting.md", "verilator-min", rf"Verilator {V} or newer"),
+    ("Install.md", "coursier", rf"coursier/releases/download/v{V}/coursier"),
     ("binder/postBuild", "scala", rf"^SCALA_VERSION={V}$"),
     ("binder/postBuild", "almond", rf"^ALMOND_VERSION={V}$"),
     ("binder/postBuild", "coursier", rf"^COURSIER_VERSION={V}$"),

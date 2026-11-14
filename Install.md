@@ -53,28 +53,27 @@ Jupyter notebooks allow you to interactively run code in your browser.
 It supports multiple programming languages.
 For this bootcamp, we'll install jupyter first and then the Scala-specific jupyter backend (now called almond).
 
+On Ubuntu 24.04 or newer, `tools/install.sh` (run from a clone of the repository) does every step of
+this section; the rest describes them by hand, for other systems.
+
 
 #### Jupyter
 First install Jupyter.
 
-Dependencies: curl, openssh-client, openjdk-17-jre (-headless OK), ca-certificates-java, Verilator 5 or newer, a C++ compiler (g++ or clang++) and make
+Dependencies: curl, openssh-client, openjdk-17-jre (-headless OK), ca-certificates-java, Verilator 5.026 or newer, a C++ compiler (g++ or clang++) and make
 
-Install Jupyter using pip3 (see [Jupyter installation docs](https://jupyter.org/install)):
+Install Jupyter with pip (see [Jupyter installation docs](https://jupyter.org/install)), in a Python
+virtual environment where the system's Python refuses packages installed with pip (as on Ubuntu 24.04):
 ```
-pip3 install --upgrade pip
-pip3 install jupyter --ignore-installed
+python3 -m venv ~/.local/share/chisel-bootcamp/venv && source ~/.local/share/chisel-bootcamp/venv/bin/activate
+pip install --upgrade pip
+pip install jupyter
 ```
-
-If pip3 isn't working out of the box (possibly because your Python3 version is out of date), you can try `python3 -m pip` in lieu of `pip3`.
 
 (To reinstall jupyter later for whatever reason, you can use `--no-deps` to avoid re-installing all the dependencies.)
 
-You may want to try out Jupyter lab, the newer interface developed by Project Jupyter.
-It is especially useful if you want to be able to run a terminal emulator in your browser.
-It can be installed with `pip3`:
-```
-pip3 install jupyterlab
-```
+The `jupyter` package includes JupyterLab, the newer interface developed by Project Jupyter, which
+can also run a terminal emulator in your browser.
 
 #### Jupyter Backend for Scala
 
@@ -82,7 +81,7 @@ If you experience errors or issues with this section, try running `rm -rf ~/.loc
 
 Download coursier and use it to install Almond (see [Almond installation docs](https://almond.sh/docs/quick-start-install) for details):
 ```bash
-curl -L -o coursier https://github.com/coursier/coursier/releases/latest/download/coursier
+curl -L -o coursier https://github.com/coursier/coursier/releases/download/v2.1.24/coursier
 chmod +x coursier
 ```
 
@@ -95,8 +94,8 @@ You can delete the `coursier` and `almond` files afterward if desired.
 
 #### Verilator
 
-Chisel simulates designs with ChiselSim ([documentation](https://www.chisel-lang.org)), which runs [Verilator](https://verilator.org) (version 5 or newer) and compiles the result with a C++ compiler.
-For example, on Debian/Ubuntu: `sudo apt install verilator g++ make` (Ubuntu 24.04 or newer provides Verilator 5), on macOS: `brew install verilator`.
+Chisel simulates designs with ChiselSim ([documentation](https://www.chisel-lang.org)), which runs [Verilator](https://verilator.org) and compiles the result with a C++ compiler.
+Use Verilator 5.026 or newer: older 5.x releases intermittently abort with "attempted to destroy locked Thread Pool" while ChiselSim compiles a design. On macOS, `brew install verilator` is new enough; Ubuntu 24.04's package (5.020) is not, and `tools/install.sh` builds a newer one there.
 Check with `verilator --version`.
 
 Chisel also needs CIRCT's `firtool` to generate SystemVerilog. You don't have to install it: Chisel downloads the matching version on first use (this needs Internet access once).
@@ -153,7 +152,7 @@ If you did not elect to add Jupyter to the PATH, start a prompt using the
 
 #### Install Scala components
 
-Download the latest Coursier from [GitHub releases](https://github.com/coursier/coursier/releases/latest/download/coursier).
+Download Coursier from [GitHub releases](https://github.com/coursier/coursier/releases/download/v2.1.24/coursier).
 
 Navigate to your download folder and run:
 ```bash
@@ -212,8 +211,9 @@ The programs are RV32I assembly, assembled by the project's own assembler (`risc
 compiler is needed (see `riscv/DESIGN.md`).
 
 Outside Docker, install [sbt](https://www.scala-sbt.org/download/) (any 1.x launcher; the project
-pins its sbt version in `riscv/project/build.properties`), a JDK 17 or later (what the image uses),
-and Verilator 5 as described above; the first `sbt` run downloads the dependencies.
+pins its sbt version in `riscv/project/build.properties`), Java 17 or later (a runtime is enough: the project has no Java sources, and the image has only
+the Java 17 runtime),
+and Verilator 5.026 or newer as described above (`tools/install.sh` installs all of them on Ubuntu, in its Python environment: activate it before running `sbt`); the first `sbt` run downloads the dependencies.
 
 The image has no network access to fetch more: changing `scalaVersion` or adding a dependency to
 `riscv/build.sbt` makes the offline `sbt` fail. Run such builds with network access.

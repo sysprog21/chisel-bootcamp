@@ -10,7 +10,7 @@ ARG TARGETARCH
 # edge/community repository; the @edge tag keeps every other package on 3.22. Later apk
 # calls need --no-cache (or a fresh index) so that the @edge tag still resolves.
 # On Arm64, firtool (an x86-64 executable, see the intermediate-builder stage) runs
-# through qemu-user.
+# through qemu-user. ChiselSim needs Verilator 5.026 or newer (older ones abort now and then).
 # Yosys (for the formal check of 5.10) is not packaged for stable Alpine; YoWASP's build is Yosys
 # compiled to WebAssembly, run by wasmtime (wheels for musl on x86-64 and Arm64), and installed as
 # `yosys`. It adds about 115 MB; its first run in a container compiles it (about a minute).

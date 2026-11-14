@@ -15,9 +15,11 @@ The project is built with [sbt](https://www.scala-sbt.org/) 1.x (pinned in
 - sbt 1.x keeps the build definition in Scala 2.12, independent of the project's Scala 2.13;
   sbt 2.0 (Scala 3 build definitions) can follow once the course material settles.
 
-Cost in the Docker image (measured with sbt 1.13.1 and Chisel 7.16.0): +140 MB (961 MB to
-1.1 GB): the sbt launcher (4 MB, without the `sbtn` native clients), sbt's runtime and Scala 2.12 in
-`/opt/sbt-home` (73 MB), and the project's extra dependencies in `/coursier_cache` (58 MB).
+Cost in the Docker image (measured with sbt 1.13.1 and Chisel 7.16.0, before the image was cut
+down to its present 0.65 GB): +140 MB (961 MB to 1.1 GB): the sbt launcher (4 MB, without the
+`sbtn` native clients), sbt's runtime and Scala 2.12 in
+`/opt/cache/sbt` (73 MB), and the project's extra dependencies in `/opt/cache/coursier` (58 MB);
+the image stores the jars that both hold once.
 The warm-up `sbt update Test/compile` adds about a minute to a native image build; a complete
 Arm64 cross-build under qemu took 310 s (see the Dockerfile for the qemu workaround).
 

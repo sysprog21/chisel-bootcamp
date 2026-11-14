@@ -74,3 +74,8 @@ c.ContentsManager.hide_globs = [
     "images",
     "source",
 ]
+
+# The image has the Scala kernel only (it leaves out the Python kernel that JupyterLab installs):
+# make it the default, and do not look for the Python one
+c.MultiKernelManager.default_kernel_name = "scala"
+c.KernelSpecManager.ensure_native_kernel = False

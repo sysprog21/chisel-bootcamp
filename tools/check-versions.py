@@ -110,7 +110,7 @@ def collect():
 def chisel_firtool_version(chisel_version):
     """:returns the firtool version in chisel3.BuildInfo, read from the Chisel sources jar."""
     rel = CHISEL_SOURCES.format(v=chisel_version)
-    caches = [os.environ.get("COURSIER_CACHE"), os.path.expanduser("~/.cache/coursier/v1"), "/coursier_cache"]
+    caches = [os.environ.get("COURSIER_CACHE"), os.path.expanduser("~/.cache/coursier/v1"), "/opt/cache/coursier"]
     cached = [
         p for p in (os.path.join(d, "https/repo1.maven.org/maven2", rel) for d in caches if d) if os.path.isfile(p)
     ]

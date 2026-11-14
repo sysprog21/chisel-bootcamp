@@ -10,3 +10,4 @@ c.DockerSpawner.notebook_dir = "/chisel-bootcamp"
 c.DockerSpawner.volumes = {"bootcamp-{username}": "/chisel-bootcamp"}
 c.DockerSpawner.mem_limit = "4G"  # a JVM beside Verilator's C++ compiler (docs/troubleshooting.md)
 c.DockerSpawner.cpu_limit = 2
+c.Spawner.default_url = "/lab"  # JupyterLab (the image has no classic Notebook)

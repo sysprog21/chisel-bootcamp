@@ -50,6 +50,12 @@ CHECKS = [
     ("tools/install.sh", "sbt", rf"^SBT_VERSION={V}$"),
     ("Dockerfile", "sbt-sha256", rf"^ENV SBT_SHA256={SHA256}$"),
     ("tools/install.sh", "sbt-sha256", rf"^SBT_SHA256={SHA256}$"),
+    ("Dockerfile", "coursier-sha256", rf"^ENV COURSIER_SHA256={SHA256}$"),
+    ("tools/install.sh", "coursier-sha256", rf"^COURSIER_SHA256={SHA256}$"),
+    ("binder/postBuild", "coursier-sha256", rf"^COURSIER_SHA256={SHA256}$"),
+    ("tools/install.sh", "firtool", rf"^FIRTOOL_VERSION={V}$"),
+    ("Dockerfile", "firtool-jar-sha256", rf"^ENV FIRTOOL_JAR_SHA256={SHA256}$"),
+    ("tools/install.sh", "firtool-jar-sha256", rf"^FIRTOOL_JAR_SHA256={SHA256}$"),
     ("Dockerfile", "yowasp-yosys", rf"yowasp-yosys=={VP}"),
     ("tools/install.sh", "yowasp-yosys", rf"^YOWASP_YOSYS_VERSION={VP}$"),
     ("Dockerfile", "yowasp-runtime", rf"yowasp-runtime=={V}"),
@@ -64,6 +70,7 @@ CHECKS = [
     ("Install.md", "verilator-min", rf"Verilator {V} or newer"),
     ("docs/troubleshooting.md", "verilator-min", rf"Verilator {V} or newer"),
     ("Install.md", "coursier", rf"coursier/releases/download/v{V}/coursier"),
+    ("Install.md", "coursier-sha256", rf"^echo \"{SHA256}  coursier\" \| sha256sum -c -$"),
     ("binder/postBuild", "scala", rf"^SCALA_VERSION={V}$"),
     ("binder/postBuild", "almond", rf"^ALMOND_VERSION={V}$"),
     ("binder/postBuild", "coursier", rf"^COURSIER_VERSION={V}$"),
@@ -77,6 +84,7 @@ CHECKS = [
     ("Install.md", "scala", rf"scala-kernel_{V}:"),
     ("Install.md", "almond", r"scala-kernel_[0-9.]+:([0-9.]+[0-9])"),
     ("README.md", "chisel", rf"`chisel-{V}`"),
+    ("docs/jupyterhub/Dockerfile", "chisel", rf"^ARG BOOTCAMP_IMAGE=sysprog21/chisel-bootcamp:chisel-{V}$"),
     ("2.8_memories.ipynb", "firtool", rf"firtool {V} builds"),  # its read-under-write findings
     ("2.8_memories.ipynb", "firtool", rf"version {V} here"),
     ("2.8_memories.ipynb", "chisel", rf"In Chisel {V}, `SRAM`"),  # its MemoryFile finding

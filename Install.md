@@ -82,6 +82,8 @@ If you experience errors or issues with this section, try running `rm -rf ~/.loc
 Download coursier and use it to install Almond (see [Almond installation docs](https://almond.sh/docs/quick-start-install) for details):
 ```bash
 curl -L -o coursier https://github.com/coursier/coursier/releases/download/v2.1.24/coursier
+echo "7aa975f12469726d6bb87852107afe0b8d6f3c82b12a49ef43cc6647c4e057ca  coursier" | sha256sum -c -
+# without sha256sum (as on macOS), end the line above with `| shasum -a 256 -c -` instead
 chmod +x coursier
 ```
 
@@ -100,6 +102,10 @@ Check with `verilator --version`.
 
 Chisel also needs CIRCT's `firtool` to generate SystemVerilog. You don't have to install it: Chisel downloads the matching version on first use (this needs Internet access once).
 You can also point the `CHISEL_FIRTOOL_PATH` environment variable at a directory that contains `firtool` 1.160.0.
+
+On Linux/Arm64 (outside Docker) there is no firtool for Chisel to download: Maven Central has firtool
+for Linux x86-64, macOS and Windows only. `tools/install.sh` sets up the x86-64 one under qemu-user,
+as the Docker image does (firtool is slower there), and points `CHISEL_FIRTOOL_PATH` at it.
 
 #### Yosys
 

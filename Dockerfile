@@ -56,6 +56,8 @@ RUN adduser -D -s /bin/bash bootcamp
 ENV SCALA_VERSION=2.13.18
 ENV ALMOND_VERSION=0.14.5
 ENV COURSIER_VERSION=2.1.24
+# sha256 of the coursier launcher of its GitHub release; update together with COURSIER_VERSION
+ENV COURSIER_SHA256=7aa975f12469726d6bb87852107afe0b8d6f3c82b12a49ef43cc6647c4e057ca
 ENV SBT_VERSION=1.13.1
 # sha256 of sbt-$SBT_VERSION.tgz (from its GitHub release); update together with SBT_VERSION
 ENV SBT_SHA256=4a20e36c1642b6d5be34ef641d2ed6c8c0d464e6145283730d5566716e4083be
@@ -64,6 +66,8 @@ ENV CHISEL_VERSION=7.16.0
 # tools/check-versions.py, which also makes you revisit what 2.8_memories.ipynb says about how
 # this firtool builds a SyncReadMem).
 ENV FIRTOOL_VERSION=1.160.0
+# sha256 of llvm-firtool-$FIRTOOL_VERSION-linux-x64.jar (Maven Central); update together
+ENV FIRTOOL_JAR_SHA256=8f66a76dd7e48dd3b5134bafa091e467d90d4aef2f85b0ebcf3659435f9b22e6
 ENV JUPYTER_CONFIG_DIR=/jupyter/config
 ENV JUPYTER_DATA_DIR=/jupyter/data
 
@@ -96,6 +100,7 @@ RUN \
     apk add --no-cache curl unzip && \
     curl -fL --retry 3 -o coursier \
         "https://github.com/coursier/coursier/releases/download/v${COURSIER_VERSION}/coursier" && \
+    echo "$COURSIER_SHA256  coursier" | sha256sum -c - && \
     chmod +x coursier && \
     ./coursier \
         bootstrap \
@@ -124,6 +129,7 @@ RUN \
     mkdir -p /opt/firtool/bin && \
     curl -fL --retry 3 -o firtool.jar \
         "https://repo1.maven.org/maven2/org/chipsalliance/llvm-firtool/${FIRTOOL_VERSION}/llvm-firtool-${FIRTOOL_VERSION}-linux-x64.jar" && \
+    echo "$FIRTOOL_JAR_SHA256  firtool.jar" | sha256sum -c - && \
     unzip -p firtool.jar org.chipsalliance/llvm-firtool/linux-x64/bin/firtool > /opt/firtool/bin/firtool.x86_64 && \
     rm firtool.jar && \
     chmod +x /opt/firtool/bin/firtool.x86_64 && \

@@ -14,6 +14,7 @@ set -euo pipefail
 SCALA_VERSION=2.13.18
 ALMOND_VERSION=0.14.5
 COURSIER_VERSION=2.1.24
+COURSIER_SHA256=7aa975f12469726d6bb87852107afe0b8d6f3c82b12a49ef43cc6647c4e057ca
 SBT_VERSION=1.13.1
 SBT_SHA256=4a20e36c1642b6d5be34ef641d2ed6c8c0d464e6145283730d5566716e4083be
 YOWASP_YOSYS_VERSION=0.71.0.0.post1285
@@ -24,6 +25,9 @@ WASMTIME_VERSION=47.0.1
 VERILATOR_MIN=5.026
 VERILATOR_VERSION=5.038
 VERILATOR_SHA256=f8c03105224fa034095ba6c8a06443f61f6f59e1d72f76b718f89060e905a0d4
+# firtool has no Linux/Arm64 build: on aarch64, the x86-64 one runs under qemu, as in the image
+FIRTOOL_VERSION=1.160.0
+FIRTOOL_JAR_SHA256=8f66a76dd7e48dd3b5134bafa091e467d90d4aef2f85b0ebcf3659435f9b22e6
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 prefix=$HOME/.local/share/chisel-bootcamp
@@ -84,6 +88,7 @@ ln -sf "$sbt/bin/sbt" "$venv/bin/sbt"
 coursier=$prefix/coursier-$COURSIER_VERSION
 if [ ! -x "$coursier" ]; then
     download "$coursier" "https://github.com/coursier/coursier/releases/download/v${COURSIER_VERSION}/coursier"
+    echo "$COURSIER_SHA256  $coursier" | sha256sum -c -
     chmod +x "$coursier"
 fi
 "$coursier" bootstrap -r jitpack "sh.almond:scala-kernel_${SCALA_VERSION}:${ALMOND_VERSION}" \
@@ -97,6 +102,24 @@ custom=$HOME/.jupyter/custom/custom.js
 mkdir -p "$(dirname "$custom")"
 [ -e "$custom" ] || cp "$root/source/custom.js" "$custom"
 cmp -s "$root/source/custom.js" "$custom" || echo "Left $custom as it is: append $root/source/custom.js to it by hand"
+
+# firtool on Linux/Arm64: the x86-64 build under qemu, which the environment's activation points
+# Chisel at (elsewhere, Chisel downloads its own firtool on first use)
+if [ "$(uname -m)" = aarch64 ]; then
+    firtool=$prefix/firtool-$FIRTOOL_VERSION
+    if [ ! -x "$firtool/firtool" ]; then
+        apt_install qemu-user unzip
+        mkdir -p "$firtool"
+        download "$firtool/firtool.jar" \
+            "https://repo1.maven.org/maven2/org/chipsalliance/llvm-firtool/${FIRTOOL_VERSION}/llvm-firtool-${FIRTOOL_VERSION}-linux-x64.jar"
+        echo "$FIRTOOL_JAR_SHA256  $firtool/firtool.jar" | sha256sum -c -
+        unzip -p "$firtool/firtool.jar" org.chipsalliance/llvm-firtool/linux-x64/bin/firtool >"$firtool/firtool.x86_64"
+        rm "$firtool/firtool.jar"
+        printf '#!/bin/sh\nexec qemu-x86_64 "%s/firtool.x86_64" "$@"\n' "$firtool" >"$firtool/firtool"
+        chmod +x "$firtool/firtool" "$firtool/firtool.x86_64"
+    fi
+    grep -q CHISEL_FIRTOOL_PATH "$venv/bin/activate" || echo "export CHISEL_FIRTOOL_PATH=\"$firtool\"" >>"$venv/bin/activate"
+fi
 
 PATH="$venv/bin:$PATH"
 echo "Installed: $(verilator --version), sbt $(sbt --script-version), $(dot -V 2>&1)"

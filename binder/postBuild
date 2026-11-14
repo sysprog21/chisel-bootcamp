@@ -4,6 +4,7 @@ set -e
 SCALA_VERSION=2.13.18
 ALMOND_VERSION=0.14.5
 COURSIER_VERSION=2.1.24
+COURSIER_SHA256=7aa975f12469726d6bb87852107afe0b8d6f3c82b12a49ef43cc6647c4e057ca
 
 # Chisel 7 simulates with ChiselSim, which needs a recent Verilator (older ones abort now and then)
 VERILATOR_MIN=5.026
@@ -20,6 +21,7 @@ echo "Verilator $VERILATOR"
 
 # Install coursier (the JVM launcher works on every platform)
 curl -fLo coursier "https://github.com/coursier/coursier/releases/download/v${COURSIER_VERSION}/coursier"
+echo "$COURSIER_SHA256  coursier" | sha256sum -c -
 chmod +x coursier
 
 # Install almond

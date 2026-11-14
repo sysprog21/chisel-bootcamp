@@ -1,6 +1,7 @@
 ## Local Setup Instructions
 
-If you want to run the bootcamp locally, follow the instructions below for your platform.
+If you want to run the bootcamp locally, follow the instructions below for your platform. If something
+fails, [docs/troubleshooting.md](docs/troubleshooting.md) has the errors seen so far and their fixes.
 
 Note: Java 17 or later is recommended (Java 11 also works). If you have multiple Java versions installed, select the appropriate version before running `jupyter notebook`:
 

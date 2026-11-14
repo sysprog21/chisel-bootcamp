@@ -6,10 +6,10 @@ Usage: tools/ci-notebooks.py all
 
 `all` lists every notebook registered in runtest.py; pushes to dev and the nightly run use it.
 `changed` is for pull requests: when every changed file is a notebook or cannot affect how the
-notebooks run (documentation, images, tools, tests), it lists the smoke subset plus the changed
-notebooks, plus the notebooks that use riscv/ when what they read from it changed; otherwise (the
-Dockerfile, `source/`, `runtest.py`, a workflow, ...) it lists every notebook, since any of them may
-break.
+notebooks run (documentation, images, tools other than this script, tests), it lists the smoke
+subset plus the changed notebooks, plus the notebooks that use riscv/ when what they read from it
+changed; otherwise (the Dockerfile, `source/`, `runtest.py`, this script, a workflow, ...) it lists
+every notebook, since any of them may break.
 """
 
 import fnmatch
@@ -20,6 +20,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from runtest import notebooks  # noqa: E402
+
+SELF = os.path.relpath(os.path.abspath(__file__), ROOT).replace(os.sep, "/")  # as git names it
 
 # One notebook per part of the toolchain: the kernel and Chisel (0_demo, 2.1), ChiselSim and
 # Verilator (2.6), and the FIRRTL modules (4.1).
@@ -40,6 +42,8 @@ INERT = [
     ".github/dependabot.yml",
     ".github/workflows/checks.yml",
 ]
+# Exceptions to INERT: this script chooses the notebooks, so a change to it may break the choice
+NOT_INERT = [SELF]
 # What the notebooks that load source/load-riscv.sc use from riscv/: what source/load-riscv.sc compiles, and the program
 # images and the sources that 5.4 assembles (the rest of riscv/ is inert)
 RISCV_INPUTS = [
@@ -57,8 +61,15 @@ def uses_riscv(notebook):
         return "load-riscv.sc" in f.read()
 
 
+def inert(path):
+    return path not in NOT_INERT and any(fnmatch.fnmatch(path, g) for g in INERT)
+
+
 def select(mode, changed):
-    if mode == "all" or any(p not in notebooks and not any(fnmatch.fnmatch(p, g) for g in INERT) for p in changed):
+    unknown = sorted(set(SMOKE) - set(notebooks))
+    if unknown:  # a renamed notebook would otherwise drop out of the smoke subset unnoticed
+        sys.exit(f"tools/ci-notebooks.py: SMOKE lists notebooks that runtest.py does not: {unknown}")
+    if mode == "all" or any(p not in notebooks and not inert(p) for p in changed):
         return sorted(notebooks)
     selected = set(SMOKE) | set(changed)
     if any(fnmatch.fnmatch(p, g) for p in changed for g in RISCV_INPUTS):

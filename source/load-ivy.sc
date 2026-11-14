@@ -24,9 +24,9 @@ import $ivy.`org.scalatest::scalatest:3.2.19`
 // firtool automatically (the `llvm-firtool` artifact) on first use. Simulation with
 // ChiselSim (chisel3.simulator) additionally needs Verilator 5.x and a C++ toolchain.
 
-// Almond 0.14.5 cannot report an exception whose stack trace Ammonite has trimmed to "..."
-// frames: the cell then never finishes. That happens to errors raised while Chisel
-// elaborates a module (e.g. a `???` exercise inside `new MyModule`). `scrub` drops the
+// Almond 0.14.5 cannot report an exception whose stack trace has "..." frames, which Chisel puts
+// in the stack traces of errors raised while it elaborates a module (e.g. a `???` exercise inside
+// `new MyModule`): the cell then never finishes (see docs/troubleshooting.md). `scrub` drops the
 // (uninteresting) stack traces of such exceptions so that the error message is shown.
 def scrub[T](body: => T): T =
   try body

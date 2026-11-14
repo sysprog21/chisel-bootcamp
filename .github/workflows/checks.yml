@@ -1,0 +1,41 @@
+name: Checks
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Versions, style and notebooks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Pinned versions agree (and firtool matches Chisel)
+        run: python3 tools/check-versions.py
+      - name: Pre-commit hooks (notebook outputs, Python and shell style)
+        # the hooks and pinned versions of .pre-commit-config.yaml; fails if a hook would change a file
+        run: pipx run pre-commit run --all-files --show-diff-on-failure
+      - name: Scala style (scalafmt, version from .scalafmt.conf)
+        env:
+          # sha256 of scalafmt-linux-glibc for the version in .scalafmt.conf; update both together
+          SCALAFMT_SHA256: 4a29c3651f64fbaf9adcca01c6ac2ba0e8281a3d20e08c12b152582139fae290
+        run: |
+          version=$(sed -n 's/^version *= *"\{0,1\}\([0-9.]*\).*/\1/p' .scalafmt.conf)
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/scalafmt" \
+            "https://github.com/scalameta/scalafmt/releases/download/v$version/scalafmt-linux-glibc"
+          echo "$SCALAFMT_SHA256  $RUNNER_TEMP/scalafmt" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/scalafmt"
+          python3 tools/format-scala.py --check --scalafmt "$RUNNER_TEMP/scalafmt"
+      - name: Notebook lint (each rule is first checked against a seeded violation)
+        run: python3 tests/test_notebooks.py --self-test
+      - name: The imported riscv-tests match their pinned revision (expanded with the runner's cpp)
+        run: python3 tools/import-riscv-tests.py --check

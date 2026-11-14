@@ -1,0 +1,5 @@
+# Deliberate mentions of removed Chisel 3 APIs in markdown cells, checked by
+# tests/test_notebooks.py (see REMOVED_APIS there). Format: <notebook> <API>
+2.6_chiselsim.ipynb chiseltest          # migration note and the compatibility package
+2.6_chiselsim.ipynb iotesters           # migration table
+4.4_firrtl_add_ops_per_module.ipynb firrtl.Transform  # custom transforms became CIRCT passes

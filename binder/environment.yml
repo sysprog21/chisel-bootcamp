@@ -3,4 +3,4 @@ channels:
   - conda-forge
 dependencies:
   # Ubuntu 22.04's apt package is Verilator 4, but ChiselSim requires 5.
-  - verilator >=5,<6
+  - verilator >=5.026,<6

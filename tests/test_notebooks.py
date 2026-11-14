@@ -38,7 +38,7 @@ REMOVED_APIS = {
 }
 
 # An image may sit inside a link (`[![alt](img)](url)`), so images and links are matched separately.
-MD_IMAGE = re.compile(r"!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
+MD_IMAGE = re.compile(r"!\[([^\]]*)\]\(\s*<?([^)\s>]*)>?(?:\s+\"[^\"]*\")?\s*\)")
 MD_LINK = re.compile(r"(?<!!)\[(?:[^\[\]]|!\[[^\]]*\]\([^)]*\))*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 HTML_IMG = re.compile(r"<img\b[^>]*>", re.IGNORECASE)
 HTML_ATTR = re.compile(r"""\b(src|alt|href)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
@@ -78,12 +78,17 @@ def markdown_cells(root):
             yield name, index, CODE.sub("", source)
 
 
+def link_targets(source):
+    """The targets of the markdown and HTML links in `source`."""
+    return [m.group(1) for m in MD_LINK.finditer(source)] + [
+        attrs(t).get("href", "") for t in HTML_LINK.findall(source)
+    ]
+
+
 def check_links(root):
     errors = []
     for name, index, source in markdown_cells(root):
-        targets = [m.group(1) for m in MD_LINK.finditer(source)]
-        targets += [attrs(t).get("href", "") for t in HTML_LINK.findall(source)]
-        for target in targets:
+        for target in link_targets(source):
             if PATH_LIKE.match(target) and not is_remote(target) and not os.path.exists(local_path(root, target)):
                 errors.append(f"{name} cell {index}: link to missing file {target}")
     return errors
@@ -184,7 +189,7 @@ def check_outline(root):
     ] + [f"README.md: the outline table lists {n}, which does not exist" for n in sorted(timed - set(present))]
 
 
-TROUBLESHOOTING = "](docs/troubleshooting.md)"
+TROUBLESHOOTING = "docs/troubleshooting.md"
 
 
 def check_troubleshooting(root):
@@ -192,7 +197,7 @@ def check_troubleshooting(root):
     for name, _, source in markdown_cells(root):
         if "## Setup" in source:
             setup.add(name)
-        if TROUBLESHOOTING in source:
+        if any(urllib.parse.urlsplit(t).path == TROUBLESHOOTING for t in link_targets(source)):  # anchors too
             linked.add(name)
     return [f"{n}: no link to docs/troubleshooting.md (put it under ## Setup)" for n in sorted(setup - linked)]
 
@@ -227,10 +232,10 @@ def _append(text):
     return lambda r: _edit_cell(r, "2.1_first_module.ipynb", 1, lambda s: s + "\n" + text + "\n")
 
 
-# One synthetic violation per rule
+# One synthetic violation per rule, or a list of them (each is seeded and checked on its own)
 SEEDS = {
     "links": _append("[Next](2.2_missing.ipynb)"),
-    "images": _append("![A missing figure](images/missing.png)"),
+    "images": [_append("![A missing figure](images/missing.png)"), _append("![An empty source]()")],
     "alt-text": _append("![](images/chisel_1024.png)"),
     "removed-api": _append("`import chisel3.iotesters.{PeekPokeTester, Driver}`"),
     "registered": lambda r: shutil.copy(os.path.join(r, "0_demo.ipynb"), os.path.join(r, "9_unregistered.ipynb")),
@@ -246,7 +251,7 @@ SEEDS = {
 
 def self_test():
     ok = True
-    for rule, seed in SEEDS.items():
+    for rule, seed in ((r, s) for r, seeds in SEEDS.items() for s in (seeds if isinstance(seeds, list) else [seeds])):
         with tempfile.TemporaryDirectory() as tmp:
             for p in glob.glob(os.path.join(ROOT, "*.ipynb")) + [
                 os.path.join(ROOT, f) for f in ("runtest.py", "README.md")

@@ -78,6 +78,18 @@ assert(indexed.contains("values_1 -> values"))""")
     output io : { flip bus : { data : UInt<8> }, out : UInt<8> }
     connect io.out, io.bus.data
 """)
-assert(nested.contains("io_bus_data [shape=circle"))
-assert(nested.contains("io_out [shape=doublecircle"))''')
+// shapes, and Okabe-Ito fills: inputs blue circles, outputs orange double circles
+assert(nested.contains("io_bus_data [shape=circle, fillcolor=\\"#9ccfee\\"]"))
+assert(nested.contains("io_out [shape=doublecircle, fillcolor=\\"#f3c766\\"]"))''')
+    run('''val withReg = firrtlToDot("""circuit R :
+  public module R :
+    input clock : Clock
+    input d : UInt<8>
+    output q : UInt<8>
+    reg z : UInt<8>, clock
+    connect z, d
+    connect q, z
+""")
+// registers: reddish-purple 3D boxes
+assert(withReg.contains("z [shape=box3d, fillcolor=\\"#e3b3cf\\"]"))''')
     print("visualizer regression checks passed")

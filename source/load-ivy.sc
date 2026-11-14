@@ -288,11 +288,14 @@ def firrtlToDot(firrtlString: String): String = {
   val nodes = ((edges ++ controls).flatMap { case (a, b) => Seq(a, b) }.toSeq ++ inputs ++ outputs ++ regs).distinct
   val dot   = new StringBuilder
   dot ++= s"digraph circuit {\n  label=\"Module: $top\";\n  rankdir=LR;\n  node [shape=box, style=\"rounded,filled\", fillcolor=lightgray];\n"
+  // Fill colors from the Okabe-Ito palette, lightened (sky blue, orange, reddish purple), which
+  // color-blind readers tell apart; the shapes alone also tell inputs (circle), outputs (double
+  // circle) and registers (3D box) apart
   nodes.foreach { n =>
     val attrs =
-      if (declaredAs(n, inputs)) "shape=circle, fillcolor=lightgreen"
-      else if (declaredAs(n, outputs)) "shape=doublecircle, fillcolor=lightcoral"
-      else if (declaredAs(n, regs)) "shape=box, fillcolor=gold"
+      if (declaredAs(n, inputs)) "shape=circle, fillcolor=\"#9ccfee\""
+      else if (declaredAs(n, outputs)) "shape=doublecircle, fillcolor=\"#f3c766\""
+      else if (declaredAs(n, regs)) "shape=box3d, fillcolor=\"#e3b3cf\""
       else if (opLabel.contains(n))
         s"""shape=ellipse, fillcolor=white, label="${opLabel(n)}${if (n.startsWith("_")) "" else "\\n" + n}""""
       else "shape=box, fillcolor=lightgray"

@@ -7,23 +7,28 @@ are expected, in order; the run fails if the notebook reports anything else.
 
 Usage: runtest.py [notebook_name.ipynb] [notebook_name_2.ipynb] [...]
 """
+
 import itertools
 import json
 import os
 import queue
+import re
+import shutil
 import subprocess
 import sys
 import time
 
 from typing import Dict, List, Tuple
 
-from jupyter_client.manager import start_new_kernel
-
 ROOT = os.path.dirname(os.path.abspath(__file__))
 # The first cell downloads and compiles dependencies, each `simulate` runs Verilator.
 CELL_TIMEOUT = int(os.environ.get("BOOTCAMP_CELL_TIMEOUT", "600"))
 
 NOT_IMPLEMENTED = "scala.NotImplementedError"
+# A deprecated API makes the kernel print a deprecation warning (see `source/load-ivy.sc`); it is
+# reported as an error so that deprecations do not creep back in. Notebooks must therefore not
+# print the word themselves.
+DEPRECATION = re.compile(r"^.*\bdeprecat.*$", re.IGNORECASE | re.MULTILINE)
 COMPILATION_FAILED = "Compilation Failed"
 
 
@@ -32,6 +37,9 @@ def _notebook_run(path: str) -> List[Tuple[int, str]]:
 
     :returns the errors as a list of (cell index, "<error name>: <error value>").
     """
+    # Imported here so that other scripts can import `notebooks` without Jupyter installed
+    from jupyter_client.manager import start_new_kernel
+
     with open(path, encoding="utf-8") as f:
         nb = json.load(f)
 
@@ -62,7 +70,12 @@ def _notebook_run(path: str) -> List[Tuple[int, str]]:
                     break
                 if msg["parent_header"].get("msg_id") != msg_id:
                     continue
-                if msg["msg_type"] == "error":
+                if msg["msg_type"] == "stream":
+                    errors += [
+                        (index, "Deprecation: " + m.group(0).strip())
+                        for m in DEPRECATION.finditer(msg["content"]["text"])
+                    ]
+                elif msg["msg_type"] == "error":
                     content = msg["content"]
                     errors.append((index, "{}: {}".format(content["ename"], content["evalue"])))
                 elif msg["msg_type"] == "status" and msg["content"]["execution_state"] == "idle":
@@ -93,8 +106,7 @@ def check_errors(file_name: str, expected: List[str], actual: List[Tuple[int, st
                 print("=" * 100, file=sys.stderr)
                 print(f"Errors detected in {file_name}", file=sys.stderr)
             got = "-- No Error --" if a is None else f"cell {a[0]}: {a[1][:100]!r}"
-            print(f"No match for {i}-th expected error {e if e else '-- No Error --'!r}, got {got}",
-                  file=sys.stderr)
+            print(f"No match for {i}-th expected error {e if e else '-- No Error --'!r}, got {got}", file=sys.stderr)
             return_value = False
     if not return_value:
         print("=" * 100, file=sys.stderr)
@@ -112,23 +124,37 @@ notebooks: Dict[str, List[str]] = {
     "2.4_sequential_logic.ipynb": [NOT_IMPLEMENTED] * 2,
     "2.5_exercise.ipynb": [NOT_IMPLEMENTED] * 3,
     "2.6_chiselsim.ipynb": [],
+    "2.7_enums_and_bundles.ipynb": [NOT_IMPLEMENTED] * 3,
+    "2.8_memories.ipynb": [NOT_IMPLEMENTED] * 2,
     "3.1_parameters.ipynb": ["java.util.NoSuchElementException"],
     "3.2_collections.ipynb": [NOT_IMPLEMENTED],
     "3.2_interlude.ipynb": [],
-    "3.3_higher-order_functions.ipynb": [NOT_IMPLEMENTED] +
-                                        ["java.lang.UnsupportedOperationException"] +
-                                        [NOT_IMPLEMENTED] * 3,
+    "3.3_higher-order_functions.ipynb": [NOT_IMPLEMENTED]
+    + ["java.lang.UnsupportedOperationException"]
+    + [NOT_IMPLEMENTED] * 3,
     "3.4_functional_programming.ipynb": [NOT_IMPLEMENTED, COMPILATION_FAILED, NOT_IMPLEMENTED, COMPILATION_FAILED],
     "3.5_object_oriented_programming.ipynb": [],
-    "3.6_types.ipynb": ["ChiselException: Connection between sink"] +
-                       ["I give up!"] +
-                       ['expected ")"'] +
-                       [NOT_IMPLEMENTED] * 2 +
-                       [COMPILATION_FAILED] * 4,
+    "3.6_types.ipynb": ["ChiselException: Connection between sink"]
+    + ["I give up!"]
+    + ['expected ")"']
+    + [NOT_IMPLEMENTED] * 2
+    + [COMPILATION_FAILED] * 4,
     "4.1_firrtl_ast.ipynb": [NOT_IMPLEMENTED],
     "4.2_firrtl_ast_traversal.ipynb": [NOT_IMPLEMENTED],
     "4.3_firrtl_common_idioms.ipynb": [NOT_IMPLEMENTED],
     "4.4_firrtl_add_ops_per_module.ipynb": [NOT_IMPLEMENTED],
+    "5.1_riscv_isa.ipynb": [NOT_IMPLEMENTED],
+    "5.2_alu_and_regfile.ipynb": [NOT_IMPLEMENTED] * 2,
+    "5.3_decoder.ipynb": [NOT_IMPLEMENTED] * 4,
+    "5.4_single_cycle.ipynb": [NOT_IMPLEMENTED] * 5,
+    "5.5_compliance.ipynb": [NOT_IMPLEMENTED],
+    "5.6_pipeline.ipynb": [NOT_IMPLEMENTED] * 5,
+    "5.7_hazards.ipynb": [NOT_IMPLEMENTED] * 4,
+    "5.8_bus_and_mmio.ipynb": [NOT_IMPLEMENTED] * 3,
+    # without Yosys, the formal check of the `Forward` exercise prints a note instead of building it
+    "5.9_debug_and_verify.ipynb": [NOT_IMPLEMENTED]
+    * (6 if shutil.which("yosys") or shutil.which("yowasp-yosys") else 5),
+    "5.10_to_silicon.ipynb": [NOT_IMPLEMENTED] * 6,
 }
 
 if __name__ == "__main__":

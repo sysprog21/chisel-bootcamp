@@ -1,0 +1,3 @@
+# Python style: black (run by pre-commit and CI, see CONTRIBUTING.md)
+[tool.black]
+line-length = 120

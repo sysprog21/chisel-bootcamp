@@ -1,0 +1,19 @@
+# Install once with `pip install pre-commit && pre-commit install` (see CONTRIBUTING.md).
+# Scala formatting (scalafmt) is checked by CI; run it locally as CONTRIBUTING.md explains.
+repos:
+  # Notebooks are committed without outputs or execution counts.
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.9.1
+    hooks:
+      - id: nbstripout
+  # Python style (settings in pyproject.toml)
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: 26.10.1
+    hooks:
+      - id: black
+  # Shell style: 4-space indentation
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.14.1-1
+    hooks:
+      - id: shfmt
+        args: [-w, -i, "4"]

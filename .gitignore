@@ -14,3 +14,13 @@ coursier
 almond
 /build
 *.sv
+
+# Python
+__pycache__/
+
+# sbt (riscv/)
+target/
+/riscv/build/
+/riscv/project/project/
+/riscv/.bsp/
+/riscv/fpga/build/

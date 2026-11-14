@@ -1,6 +1,7 @@
 .git
 .gitignore
 *.md
+!Install.md
 *.patch
 .ipynb_checkpoints
 **/.ipynb_checkpoints
@@ -16,3 +17,11 @@ __pycache__
 build/
 target/
 out/
+pyproject.toml
+.scalafmt.conf
+riscv/build
+riscv/target
+riscv/project/target
+riscv/project/project
+riscv/.bsp
+riscv/solutions

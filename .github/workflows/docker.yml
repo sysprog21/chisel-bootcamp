@@ -1,27 +1,192 @@
 name: Publish Docker image to DockerHub
 
+# Which notebooks run (tools/ci-notebooks.py):
+# - pull request: the smoke subset plus the changed notebooks when only notebooks or inert files
+#   (docs, images, tools, tests) change; every notebook otherwise.
+# - push to dev, nightly and manual runs: every notebook.
+# Each notebook runs in its own job, on amd64 and natively on Arm64, after one image build per
+# architecture. Wall time, measured locally (64 cores, one container per notebook, all at once):
+# the notebooks take 50 s (1_intro_to_scala) to 232 s (3.2_collections), so a run is about
+# image build + 4 minutes when the runners are free. Each job adds its time to the run summary.
+
 on:
   push:
     branches: [dev]
   pull_request:
     branches: [dev]
+  schedule:
+    - cron: "23 3 * * *" # nightly, catches breakage from moving parts such as base images
+  workflow_dispatch: # runs every test; publishing happens only on push
 
 concurrency:
-  group: docker-dev-${{ github.ref }}
-  cancel-in-progress: true
+  group: docker-${{ github.event_name }}-${{ github.ref }}
+  # A newer push to a pull request supersedes the older run. On dev a running publication is
+  # never cancelled, but GitHub keeps only the newest pending run per group, so a commit pushed
+  # while another run is pending is skipped (and gets no sha- tag). Each event has its own group,
+  # so a nightly run never cancels the publication of a push.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: chisel-bootcamp:test
+  # Per-cell timeout of runtest.py in seconds (its default, stated here so that CI can tune it)
+  BOOTCAMP_CELL_TIMEOUT: "600"
 
 # https://docs.docker.com/build/ci/github-actions/multi-platform/
 jobs:
-  docker:
-    name: Build Docker Image and Publish (only on push)
+  select:
+    name: Choose the tests
+    runs-on: ubuntu-24.04
+    outputs:
+      notebooks: ${{ steps.select.outputs.notebooks }}
+      riscv: ${{ steps.select.outputs.riscv }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # to list the files a pull request changes
+      - id: select
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          riscv=true
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            changed=$(git diff --name-only "$BASE_SHA"...HEAD)
+            notebooks=$(echo "$changed" | python3 tools/ci-notebooks.py changed)
+            # the riscv/ tests depend only on riscv/ and the image
+            echo "$changed" | grep -qE '^(riscv/|source/load-(riscv|ivy)\.sc$|tools/check-solutions\.sh$|tests/(kernel|test_riscv_import)\.py$|Dockerfile$|\.dockerignore$|\.github/workflows/docker\.yml$)' || riscv=false
+          else
+            notebooks=$(python3 tools/ci-notebooks.py all)
+          fi
+          echo "notebooks=$notebooks" >> "$GITHUB_OUTPUT"
+          echo "riscv=$riscv" >> "$GITHUB_OUTPUT"
+          echo "Notebooks: $notebooks; riscv/ tests: $riscv"
+
+  build:
+    name: Build the ${{ matrix.arch }} image
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      actions: write # the gha build cache
+    strategy:
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          # The Arm64 image runs firtool (x86-64 only) under qemu-user; build and test it on a
+          # native Arm64 runner rather than trusting the cross-build.
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          tags: ${{ env.IMAGE }}
+          outputs: type=docker,dest=${{ runner.temp }}/image.tar
+          cache-from: type=gha,scope=build-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=build-${{ matrix.arch }}
+      - name: Share the image with the notebook jobs
+        uses: actions/upload-artifact@v7
+        with:
+          name: image-${{ matrix.arch }}
+          path: ${{ runner.temp }}/image.tar
+          retention-days: 1
+          compression-level: 1
+      - name: Visualizer and chiseltest-compatibility tests
+        if: matrix.arch == 'amd64'
+        run: |
+          docker load --input "$RUNNER_TEMP/image.tar"
+          docker run --rm --network none "$IMAGE" python3 tests/test_visualizer.py
+          docker run --rm --network none "$IMAGE" python3 tests/test_chiseltest_compat.py
+
+  notebooks:
+    name: ${{ matrix.notebook }} (${{ matrix.arch }})
+    needs: [select, build]
+    runs-on: ${{ matrix.runner }}
+    # Each notebook gets a fresh runner and kernel. The limit leaves room for slow runners and
+    # for firtool under qemu on Arm64.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        notebook: ${{ fromJSON(needs.select.outputs.notebooks) }}
+        include: # the runner of each architecture, as in the build job
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: image-${{ matrix.arch }}
+          path: ${{ runner.temp }}
+      - run: docker load --input "$RUNNER_TEMP/image.tar"
+      - name: Run the notebook (offline)
+        # The image bundles every dependency, so no network is needed.
+        env:
+          NOTEBOOK: ${{ matrix.notebook }}
+        run: |
+          start=$(date +%s)
+          docker run --rm --network none -e BOOTCAMP_CELL_TIMEOUT "$IMAGE" python3 runtest.py "$NOTEBOOK"
+          echo "$NOTEBOOK (${{ matrix.arch }}): $(( $(date +%s) - start )) s" >> "$GITHUB_STEP_SUMMARY"
+
+  riscv:
+    name: riscv/ tests (${{ matrix.arch }})
+    needs: [select, build]
+    if: needs.select.outputs.riscv == 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: image-${{ matrix.arch }}
+          path: ${{ runner.temp }}
+      - uses: actions/checkout@v7 # for riscv/solutions, which the image leaves out
+      - run: docker load --input "$RUNNER_TEMP/image.tar"
+      - name: The scaffold compiles and the solutions pass every test (offline)
+        run: |
+          docker run --rm --network none -v "$PWD/riscv/solutions:/solutions:ro" -e SOLUTIONS=/solutions \
+            "$IMAGE" tools/check-solutions.sh
+      - name: Notebooks can use riscv/ (source/load-riscv.sc)
+        run: docker run --rm --network none "$IMAGE" python3 tests/test_riscv_import.py
+
+  publish:
+    # Build every platform on pull requests too, so a platform-specific break fails before
+    # merge; only a push to dev publishes.
+    name: Build all platforms (publish only on push)
+    needs: [notebooks, riscv]
+    # riscv is skipped on pull requests that do not touch it; that must not skip publishing
+    if: >-
+      !cancelled() && github.event_name != 'schedule' && needs.notebooks.result == 'success' &&
+      contains(fromJSON('["success", "skipped"]'), needs.riscv.result)
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      actions: write
-
+      actions: write # the gha build cache
     steps:
       - name: Check out the repo
         uses: actions/checkout@v7
+
+      - name: Image tags
+        id: tags
+        # latest, chisel-<CHISEL_VERSION> and sha-<short commit>
+        run: |
+          chisel=$(python3 tools/check-versions.py --print chisel)
+          {
+            echo "tags<<EOF"
+            echo "sysprog21/chisel-bootcamp:latest"
+            echo "sysprog21/chisel-bootcamp:chisel-$chisel"
+            echo "sysprog21/chisel-bootcamp:sha-${GITHUB_SHA::7}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -36,31 +201,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
 
-      - name: Build image for the smoke test (amd64)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/amd64
-          load: true
-          tags: chisel-bootcamp:test
-          cache-from: type=gha,scope=build
-          cache-to: type=gha,mode=max,scope=build
-
-      - name: Run notebooks (smoke test, offline)
-        # The image bundles every dependency, so no network is needed.
-        run: |
-          docker run --rm --network none chisel-bootcamp:test \
-            python3 runtest.py 0_demo.ipynb 2.1_first_module.ipynb 2.6_chiselsim.ipynb 4.1_firrtl_ast.ipynb
-          docker run --rm --network none chisel-bootcamp:test python3 tests/test_visualizer.py
-
-      # Build every platform on pull requests too, so a platform-specific break (such as a
-      # package missing for Arm64) fails before merge; only a push to dev publishes.
-      - name: Build all platforms (push only on push)
+      - name: Build all platforms
         uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name == 'push' }}
-          tags: sysprog21/chisel-bootcamp:latest
-          cache-from: type=gha,scope=build
-          cache-to: type=gha,mode=max,scope=build
+          tags: ${{ steps.tags.outputs.tags }}
+          # reuse the layers of the tested per-architecture builds
+          cache-from: |
+            type=gha,scope=build-amd64
+            type=gha,scope=build-arm64

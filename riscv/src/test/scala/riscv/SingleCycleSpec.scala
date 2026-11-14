@@ -118,7 +118,7 @@ class SingleCycleSpec extends AnyFlatSpec with ChiselSim {
     "fetch outside the RAM"  -> "lui t0, 0x10\njr t0"
   )
 
-  def program(name: String): String = TestPrograms.source("programs/src", name)
+  def program(name: String): String = Programs.source("programs/src", name)
 
   "SingleCycleCore" should "retire directed programs, every halt, and the committed programs like the golden model" in {
     simulate(new SingleCycleSystem) { c =>

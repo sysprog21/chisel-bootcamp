@@ -154,6 +154,7 @@ notebooks: Dict[str, List[str]] = {
     # without Yosys, the formal check of the `Forward` exercise prints a note instead of building it
     "5.9_debug_and_verify.ipynb": [NOT_IMPLEMENTED]
     * (6 if shutil.which("yosys") or shutil.which("yowasp-yosys") else 5),
+    "5.10_to_silicon.ipynb": [NOT_IMPLEMENTED] * 6,
 }
 
 if __name__ == "__main__":

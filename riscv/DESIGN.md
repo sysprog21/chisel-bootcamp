@@ -202,3 +202,23 @@ building Yosys in the image would take hours under QEMU for Arm64, while YoWASP'
 its runtime and wasmtime) and adds about 115 MB. Its first run in a container compiles the
 WebAssembly (about a minute); the compiled cache (220 MB) is not baked into the image. SymbiYosys
 (multi-cycle BMC and induction) is not installed.
+
+## Synthesis and a board
+
+Module 5.10 takes the designs through Verilator's lint and Yosys's synthesis (`Synth.lint`,
+`Synth.cells`; `sbt "runMain riscv.SynthReport"` prints the table for the decoders and cores).
+`Yosys.verilog` emits SystemVerilog that Yosys's reader takes: firtool's
+`disallowLocalVariables,disallowPackedArrays` lowering options, no layers, no randomization
+(without them, Yosys rejects the `switch` decoder's packed-array table and the pipelined cores'
+`automatic` variables). Families: iCE40 and ECP5, two that nextpnr supports. The
+combinational register file decides the iCE40 numbers (992 flip-flops, x0 being constant, as iCE40 block RAMs read
+synchronously; the forwarding core alone is about 4500 of an UP5K's 5280 LUTs), so the board is a
+ULX3S (ECP5: LUT RAM reads combinationally). `Ulx3sTop` (`Board.scala`) boots a program from a ROM
+through the RAM's load port with the system held in reset (rather than initializing the RAM with
+`$readmemh`: a reset then restores the program's data too), and runs `SocSystem` with a 4 KB RAM
+(`ramWords`); `fpga/ulx3s.lpf` gives its pins (from the board's published `ulx3s_v20.lpf`) and
+`fpga/ulx3s.sh` runs synthesis, nextpnr-ecp5 and ecppack. Place and route is not in the image
+(YoWASP's nextpnr-ice40 wheel alone is 72 MB): the script was checked with YoWASP's nextpnr-ecp5 in
+a scratch container (LFE5U-12F, about 48 MHz against the board's 25 MHz), not on a board. Yosys's
+`ltp` was tried as a stand-in for timing and dropped: it follows paths through LUT RAM across
+cycles, so its lengths mean nothing here.

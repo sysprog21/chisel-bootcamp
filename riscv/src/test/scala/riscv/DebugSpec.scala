@@ -58,12 +58,12 @@ class DebugSpec extends AnyFlatSpec with ChiselSim {
     simulate(new CoreSystem(new ForwardingCore(forwardUnit = new OldestFirst))) { c =>
       val bug = CoSim.compare(c, Asm("li a0, 1\nli a0, 2\nadd a1, a0, a0\necall"))
       assert(bug.exists(_.contains("a1 <- 0x00000004")), bug) // the model's a1; the core computes 1 + 1
-      assert(CoSim.compare(c, Asm(TestPrograms.source("programs/src", "fib"))).isEmpty, "fib does not show it")
+      assert(CoSim.compare(c, Asm(Programs.source("programs/src", "fib"))).isEmpty, "fib does not show it")
     }
   }
 
   "Formal.prove" should "prove the forwarding unit, and give a counterexample for the seeded bug" in {
-    assume(Formal.available, "yosys is not on the PATH")
+    assume(Yosys.available, "yosys is not on the PATH")
     assert(Formal.prove(new ForwardCheck(new Forward)).isEmpty)
     val cex                 = Formal.prove(new ForwardCheck(new OldestFirst)).get
     def value(name: String) = cex.linesIterator.find(_.startsWith(s"\\io_$name ")).get.split("\\s+")(1).toLong

@@ -8,10 +8,11 @@ import org.scalatest.flatspec.AnyFlatSpec
   * (the number of the failing test << 1) | 1.
   */
 class ComplianceSpec extends AnyFlatSpec with ChiselSim {
-  val dir   = "programs/riscv-tests/rv32ui"
-  val tests = TestPrograms.names(dir)
+  val dir = "programs/riscv-tests/rv32ui"
   // each test assembled once, for the golden model and the core alike
-  val images = tests.map(name => name -> Asm(TestPrograms.source(dir, name))).toMap
+  val all    = Programs.images(dir)
+  val tests  = all.map(_._1)
+  val images = all.toMap
 
   "The rv32ui tests" should "be there" in {
     assert(tests.size == 40 && tests.contains("add") && tests.contains("ld_st"))

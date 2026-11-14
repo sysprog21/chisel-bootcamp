@@ -39,10 +39,11 @@ class Ulx3sTop(program: Seq[Long], ramWords: Int = 1024, clockHz: Int = 25000000
 object Ulx3s extends App {
   val name = args.headOption.getOrElse("hello")
   require(name.matches("[A-Za-z0-9_-]+"), s"not the name of a program of programs/src: $name")
-  val out = os.pwd / "fpga" / "build" / "Ulx3sTop.sv"
+  val riscv = if (os.isDir(os.pwd / "fpga")) os.pwd else os.pwd / "riscv" // sbt runs in riscv/
+  val out   = riscv / "fpga" / "build" / "Ulx3sTop.sv"
   os.write.over(
     out,
-    Yosys.verilog(new Ulx3sTop(Asm(os.read(os.pwd / "programs" / "src" / s"$name.S")))),
+    Yosys.verilog(new Ulx3sTop(Asm(Programs.source("programs/src", name)))),
     createFolders = true
   )
   println(s"wrote $out")

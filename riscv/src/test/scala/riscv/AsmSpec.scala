@@ -2,9 +2,7 @@ package riscv
 
 import org.scalatest.flatspec.AnyFlatSpec
 
-import java.io.File
-import scala.io.Source
-import scala.util.{Random, Using}
+import scala.util.Random
 
 /** Checks the software encoder, decoder and assembler against the hardware patterns of Isa.scala and
   * against GNU as (riscv-none-elf-as 2.44 -march=rv32i -mno-relax, which produced the expected words
@@ -280,15 +278,14 @@ class AsmSpec extends AnyFlatSpec {
   }
 
   it should "assemble each program of programs/src into its committed programs/hex image" in {
-    def names(dir: String, ext: String) =
-      new File(dir).list().filter(_.endsWith(ext)).map(_.dropRight(ext.length)).toSet
-    val programs = names("programs/src", ".S")
-    assert(programs.nonEmpty && programs == names("programs/hex", ".hex"), "a .S without its .hex, or the other way")
+    val programs = Programs.names("programs/src")
+    assert(
+      programs.nonEmpty && programs == Programs.names("programs/hex", "hex"),
+      "a .S without its .hex, or the other way"
+    )
     for (p <- programs) {
-      val source = Using.resource(Source.fromFile(s"programs/src/$p.S"))(_.mkString)
-      val hex    = Using.resource(Source.fromFile(s"programs/hex/$p.hex"))(_.mkString)
       assert(
-        Asm.assemble(source).hex == hex,
+        Asm.assemble(Programs.source("programs/src", p)).hex == Programs.source("programs/hex", p, "hex"),
         s"$p: run sbt \"runMain riscv.Asm programs/src/$p.S programs/hex/$p.hex\""
       )
     }
@@ -339,7 +336,7 @@ class AsmSpec extends AnyFlatSpec {
 
   "Rv32i.disassemble" should "give text that assembles back into the same word" in {
     val dirs  = Seq("programs/src", "programs/riscv-tests/rv32ui")
-    val words = dirs.flatMap(d => TestPrograms.names(d).flatMap(n => Asm(TestPrograms.source(d, n)))).distinct
+    val words = dirs.flatMap(d => Programs.images(d).flatMap(_._2)).distinct
     val insts = words.filter(w => Rv32i.decode(w).exists(_.name != "fence")) // fence shows no operands
     assert(insts.size > 500)
     for (w <- insts) {

@@ -70,21 +70,20 @@ class ForwardingSpec extends AnyFlatSpec with ChiselSim {
   it should "run the committed, regression and random programs unpadded" in {
     simulate(new ForwardingSystem) { c =>
       for ((name, result) <- Seq("fib" -> 55, "fact" -> 120)) {
-        CoSim.compare(c, Asm(TestPrograms.source("programs/src", name))).foreach(d => fail(s"$name: $d"))
+        CoSim.compare(c, Asm(Programs.source("programs/src", name))).foreach(d => fail(s"$name: $d"))
         assert(CoSim.reg(c, riscv.Reg("a0")) == result, name)
       }
-      for (name <- TestPrograms.names("programs/regress"))
-        CoSim.compare(c, Asm(TestPrograms.source("programs/regress", name))).foreach(d => fail(s"$name: $d"))
+      for ((name, image) <- Programs.images("programs/regress"))
+        CoSim.compare(c, image).foreach(d => fail(s"$name: $d"))
       for (seed <- 1L to 20L)
         CoSim.compare(c, Asm(RandomProgram(seed))).foreach(d => fail(s"RandomProgram($seed): $d"))
     }
   }
 
   it should "pass the rv32ui tests" in {
-    val dir = "programs/riscv-tests/rv32ui"
     simulate(new ForwardingSystem) { c =>
-      for (name <- TestPrograms.names(dir)) {
-        CoSim.compare(c, Asm(TestPrograms.source(dir, name))).foreach(d => fail(s"$name: $d"))
+      for ((name, image) <- Programs.images("programs/riscv-tests/rv32ui")) {
+        CoSim.compare(c, image).foreach(d => fail(s"$name: $d"))
         assert(CoSim.reg(c, riscv.Reg("a0")) == 0, name)
       }
     }
@@ -93,19 +92,17 @@ class ForwardingSpec extends AnyFlatSpec with ChiselSim {
   it should "wait for a data memory that answers late" in {
     simulate(new SlowDataSystem(delay = 2)) { c =>
       for (name <- Seq("fib", "fact"))
-        CoSim.compare(c, Asm(TestPrograms.source("programs/src", name))).foreach(d => fail(s"$name: $d"))
+        CoSim.compare(c, Asm(Programs.source("programs/src", name))).foreach(d => fail(s"$name: $d"))
       for ((name, source) <- hazards) CoSim.compare(c, Asm(source), maxCycles = 1000).foreach(d => fail(s"$name: $d"))
       for (seed <- 1L to 5L)
         CoSim.compare(c, Asm(RandomProgram(seed))).foreach(d => fail(s"RandomProgram($seed): $d"))
-      for (name <- Seq("ld_st", "st_ld", "lw", "sb")) {
-        val dir = "programs/riscv-tests/rv32ui"
-        CoSim.compare(c, Asm(TestPrograms.source(dir, name))).foreach(d => fail(s"$name: $d"))
-      }
+      for (name <- Seq("ld_st", "st_ld", "lw", "sb")) // the rv32ui tests that load and store most
+        CoSim.compare(c, Asm(Programs.source("programs/riscv-tests/rv32ui", name))).foreach(d => fail(s"$name: $d"))
     }
   }
 
   it should "take fewer cycles than the nop-padded pipeline of 5.6" in {
-    val programs = Seq("fib", "fact").map(n => TestPrograms.source("programs/src", n))
+    val programs = Seq("fib", "fact").map(n => Programs.source("programs/src", n))
     def cycles(system: => RiscvSystem, images: Seq[Seq[Long]]): Seq[Int] = {
       var result = Seq.empty[Int]
       simulate(system) { c =>

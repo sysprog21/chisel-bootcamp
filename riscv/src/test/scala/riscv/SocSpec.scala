@@ -30,7 +30,7 @@ class SocSpec extends AnyFlatSpec with ChiselSim {
 
   "SocSystem" should "print Hello, world through the UART" in {
     simulate(new SocSystem) { c =>
-      val image = Asm(TestPrograms.source("programs/src", "hello"))
+      val image = Asm(Programs.source("programs/src", "hello"))
       CoSim.compare(c, image).foreach(d => fail(d)) // on the bus, as on the model
       CoSim.load(c, image)
       assert(Soc.run(c) == "Hello, world!\n")
@@ -42,13 +42,8 @@ class SocSpec extends AnyFlatSpec with ChiselSim {
 
   it should "run programs through the bus as the golden model does" in {
     simulate(new SocSystem) { c =>
-      for (name <- Seq("fib", "fact"))
-        CoSim.compare(c, Asm(TestPrograms.source("programs/src", name))).foreach(d => fail(s"$name: $d"))
-      for (seed <- 1L to 5L)
-        CoSim.compare(c, Asm(RandomProgram(seed))).foreach(d => fail(s"RandomProgram($seed): $d"))
-      val dir = "programs/riscv-tests/rv32ui"
-      for (name <- TestPrograms.names(dir))
-        CoSim.compare(c, Asm(TestPrograms.source(dir, name))).foreach(d => fail(s"$name: $d"))
+      for ((name, image) <- Programs.corpus(seeds = 1L to 5L))
+        CoSim.compare(c, image).foreach(d => fail(s"$name: $d"))
     }
   }
 

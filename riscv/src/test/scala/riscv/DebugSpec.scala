@@ -58,7 +58,7 @@ class DebugSpec extends AnyFlatSpec with ChiselSim {
     simulate(new CoreSystem(new ForwardingCore(forwardUnit = new OldestFirst))) { c =>
       val bug = CoSim.compare(c, Asm("li a0, 1\nli a0, 2\nadd a1, a0, a0\necall"))
       assert(bug.exists(_.contains("a1 <- 0x00000004")), bug) // the model's a1; the core computes 1 + 1
-      assert(CoSim.compare(c, Asm(TestPrograms.source("programs/src", "fib"))).isEmpty, "fib does not show it")
+      assert(CoSim.compare(c, Asm(Programs.source("programs/src", "fib"))).isEmpty, "fib does not show it")
     }
   }
 

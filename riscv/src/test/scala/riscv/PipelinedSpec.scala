@@ -75,7 +75,7 @@ class PipelinedSpec extends AnyFlatSpec with ChiselSim {
       for ((name, source) <- programs)
         CoSim.compare(c, Asm.padded(source, nops), maxCycles = 2000).foreach(d => fail(s"$name: $d"))
       for ((name, result) <- Seq("fib" -> 55, "fact" -> 120)) {
-        CoSim.compare(c, Asm.padded(TestPrograms.source("programs/src", name), nops)).foreach(d => fail(s"$name: $d"))
+        CoSim.compare(c, Asm.padded(Programs.source("programs/src", name), nops)).foreach(d => fail(s"$name: $d"))
         assert(CoSim.reg(c, riscv.Reg("a0")) == result, name)
       }
       for (seed <- 1L to 10L)

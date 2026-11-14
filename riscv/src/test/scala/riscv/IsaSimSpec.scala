@@ -5,7 +5,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 class IsaSimSpec extends AnyFlatSpec {
 
   def program(name: String): Program =
-    Asm.assemble(TestPrograms.source("programs/src", name)) // AsmSpec: equals hex/
+    Asm.assemble(Programs.source("programs/src", name)) // AsmSpec: equals hex/
 
   /** Runs `source` and returns the simulator, checking that it ends with ECALL. */
   def run(source: String): IsaSim = {

@@ -8,14 +8,13 @@ class SynthSpec extends AnyFlatSpec with ChiselSim {
 
   "Ulx3sTop" should "boot its program into the RAM, run it, and print through the UART" in {
     val divider = 4
-    simulate(new Ulx3sTop(Asm(TestPrograms.source("programs/src", "hello")), clockHz = 100 * divider, baud = 100)) {
-      c =>
-        c.reset.poke(true.B)
-        c.clock.step()
-        c.reset.poke(false.B)
-        val out = Soc.listen(c.clock, c.ftdi_rxd, (c.led.peek().litValue & 2) != 0, divider, maxCycles = 20000)
-        assert(out == "Hello, world!\n", out)
-        assert((c.led.peek().litValue & 3) == 3, "LED 0: booted; LED 1: halted")
+    simulate(new Ulx3sTop(Asm(Programs.source("programs/src", "hello")), clockHz = 100 * divider, baud = 100)) { c =>
+      c.reset.poke(true.B)
+      c.clock.step()
+      c.reset.poke(false.B)
+      val out = Soc.listen(c.clock, c.ftdi_rxd, (c.led.peek().litValue & 2) != 0, divider, maxCycles = 20000)
+      assert(out == "Hello, world!\n", out)
+      assert((c.led.peek().litValue & 3) == 3, "LED 0: booted; LED 1: halted")
     }
   }
 
@@ -27,7 +26,7 @@ class SynthSpec extends AnyFlatSpec with ChiselSim {
 
   it should "fit the board's system in the smallest ULX3S (LFE5U-12F: 12K LUTs, 32 block RAMs)" in {
     assume(Yosys.available, "yosys is not on the PATH")
-    val c = Synth.cells(new Ulx3sTop(Asm(TestPrograms.source("programs/src", "hello"))), "ecp5")
+    val c = Synth.cells(new Ulx3sTop(Asm(Programs.source("programs/src", "hello"))), "ecp5")
     assert(c.luts > 1000 && c.luts + 2 * c.lutRams < 12000 && c.blockRams <= 32 && c.flipFlops > 0, c.toString)
   }
 

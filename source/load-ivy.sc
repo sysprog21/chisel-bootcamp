@@ -41,9 +41,22 @@ def scrub[T](body: => T): T =
       throw e
   }
 
-// Convenience function to invoke Chisel and grab emitted SystemVerilog.
-def getVerilog(dut: => chisel3.RawModule): String =
-  scrub(circt.stage.ChiselStage.emitSystemVerilog(dut))
+// Convenience function to invoke Chisel and grab emitted SystemVerilog. Chisel 7 puts assertions
+// in verification layers, extra files that follow the module (after a `// ----- 8< ----- FILE`
+// line each, as firtool 1.160 writes them: recheck when FIRTOOL_VERSION changes); those of a
+// module without assertions only hold include guards, and are then left out (all of them; one with
+// an assertion keeps them all, as they include each other).
+def getVerilog(dut: => chisel3.RawModule): String = {
+  val sv                       = scrub(circt.stage.ChiselStage.emitSystemVerilog(dut))
+  val marker                   = "// ----- 8< ----- FILE"
+  val parts                    = sv.split(s"(?m)^(?=${java.util.regex.Pattern.quote(marker)})")
+  def guardsOnly(part: String) = part.linesIterator.drop(1).map(_.trim).forall { l =>
+    l.isEmpty || l.startsWith("`ifndef") || l.startsWith("`define") || l.startsWith("`endif") ||
+    l.startsWith("`include") || l.startsWith("//")
+  }
+  val (layers, design) = parts.partition(_.startsWith(marker))
+  (if (layers.forall(guardsOnly)) design else parts).mkString.stripTrailing + "\n"
+}
 
 // Convenience function to invoke Chisel and grab emitted FIRRTL.
 def getFirrtl(dut: => chisel3.RawModule): String =
@@ -53,8 +66,9 @@ def getFirrtl(dut: => chisel3.RawModule): String =
 // runs `body` against it. Two differences and two options, so that the notebooks stay short:
 //  * errors go through `scrub`;
 //  * a `Module` is reset for one clock cycle before `body` runs, like chiseltest's `test`
-//    did. (ChiselSim itself leaves the reset to you: until it is asserted, registers hold
-//    random values.)
+//    did, and like the `simulate` of ChiselSim's ScalaTest trait. (`simulateRaw`, which this one
+//    calls, and EphemeralSimulator's `simulate` leave the reset to you: until it is asserted,
+//    registers hold random values.)
 //  * the option `randomization` chooses the initial values of registers and memories. ChiselSim's
 //    default randomizes both; `Randomization.random.copy(memories = false)` leaves memories alone,
 //    which a memory loaded from a file needs (the random values would overwrite its contents).

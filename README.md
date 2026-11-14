@@ -100,7 +100,8 @@ notebooks load the project.
 By the end, you will be able to read and understand most of the
 [Chisel code base](https://github.com/chipsalliance/chisel), begin using
 [Rocket Chip](https://github.com/chipsalliance/rocket-chip), and build and test a processor of your
-own. This tutorial *does not* yet cover backend flows for FPGA or ASIC processes, or analog circuits.
+own, and synthesize it for an FPGA board (Module 5.10). It does not cover ASIC flows or analog
+circuits.
 
 ### Which path should I take?
 

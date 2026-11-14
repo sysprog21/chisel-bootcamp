@@ -95,11 +95,12 @@ jobs:
           path: ${{ runner.temp }}/image.tar
           retention-days: 1
           compression-level: 1
-      - name: Visualizer tests
+      - name: Visualizer and chiseltest-compatibility tests
         if: matrix.arch == 'amd64'
         run: |
           docker load --input "$RUNNER_TEMP/image.tar"
           docker run --rm --network none "$IMAGE" python3 tests/test_visualizer.py
+          docker run --rm --network none "$IMAGE" python3 tests/test_chiseltest_compat.py
 
   notebooks:
     name: ${{ matrix.notebook }} (${{ matrix.arch }})

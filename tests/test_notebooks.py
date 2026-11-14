@@ -27,7 +27,8 @@ import urllib.parse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ALLOWLIST = os.path.join("tests", "lint-allowlist.txt")
-# name -> pattern; a mention counts even inside an import such as `import firrtl.{Transform, ...}`
+# Removed Chisel 3 APIs, and legacy ones that new code should not use (chiseltest): name -> pattern.
+# A mention counts even inside an import such as `import firrtl.{Transform, ...}`.
 REMOVED_APIS = {
     "chiseltest": r"(?<!\w)chiseltest\b",
     "iotesters": r"(?<!\w)iotesters\b",

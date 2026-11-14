@@ -46,7 +46,10 @@ pins one exact build.
 ### Alternative Options
 
 - Try it online [HERE](https://mybinder.org/v2/gh/sysprog21/chisel-bootcamp/HEAD)! No local installation required!
+  Binder covers Modules 1-4 only: it lacks sbt and Yosys (Module 5), and its memory may be too
+  small for a JVM beside a Verilator build. Use the Docker image for the whole course.
 - For local installation without Docker, [look at installation instructions here](Install.md).
+- Teaching a course? See the [instructor guide](docs/instructors.md).
 
 ## Outline
 

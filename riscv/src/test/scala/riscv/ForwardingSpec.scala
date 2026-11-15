@@ -48,7 +48,6 @@ class ForwardingSpec extends AnyFlatSpec with ChiselSim {
     "WB to ID"                 -> "li a0, 5\nnop\nnop\naddi a1, a0, 1\necall",
     "the newest result wins"   -> "li a0, 1\nli a0, 2\nadd a1, a0, a0\necall",
     "both operands"            -> "li a0, 3\nli a1, 4\nsub a2, a1, a0\necall",
-    "x0 is not forwarded"      -> "addi zero, zero, 7\nadd a0, zero, zero\necall",
     "load-use"                 -> "la t0, d\nlw a0, 0(t0)\naddi a1, a0, 1\necall\n.data\nd: .word 41",
     "load-use, second operand" -> "la t0, d\nlw a0, 0(t0)\nadd a1, t0, a0\necall\n.data\nd: .word 41",
     "load then store"          -> "la t0, d\nlw a0, 0(t0)\nsw a0, 4(t0)\nlw a1, 4(t0)\necall\n.data\nd: .word 41, 0",

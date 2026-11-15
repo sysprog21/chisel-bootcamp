@@ -54,6 +54,46 @@ class DebugSpec extends AnyFlatSpec with ChiselSim {
     assert(count(0) == -1 && count(2) == 0 && count(3) == 5 && vcd("TOP.dut.count")(3) == 5)
   }
 
+  def parse(svg: String) = javax.xml.parsers.DocumentBuilderFactory
+    .newInstance()
+    .newDocumentBuilder()
+    .parse(new java.io.ByteArrayInputStream(svg.getBytes("UTF-8")))
+
+  "Waves" should "draw a clock, bits and buses as well-formed SVG" in {
+    val times = Seq(0L, 1L, 2L, 3L)
+    val svg   = Waves.svg(
+      times,
+      times.map(_.toString),
+      Seq(
+        Waves.Bit("valid", t => if (t == 3) -1 else t % 2), // x in the last cycle
+        Waves.Bus("value", t => if (t < 2) "" else s"x10 = $t <&>") // to escape
+      ),
+      mark = Set(2),
+      note = "a note"
+    )
+    val doc   = parse(svg)
+    val texts = doc.getElementsByTagName("text")
+    val shown = (0 until texts.getLength).map(texts.item(_).getTextContent)
+    assert(Seq("clock", "valid", "value", "a note", "x10 = 2 <&>", "x10 = 3 <&>").forall(shown.contains), shown)
+    assert(doc.getElementsByTagName("polygon").getLength == 2) // a band per value
+    assertThrows[IllegalArgumentException](Waves.svg(times, Seq("0"), Nil))
+    assertThrows[IllegalArgumentException](Waves.svg(Nil, Nil, Nil))
+
+    // one cycle, a value too long for its band, marks out of range, a decimal comma locale
+    val locale = java.util.Locale.getDefault
+    java.util.Locale.setDefault(java.util.Locale.GERMANY)
+    val one =
+      try Waves.svg(Seq(0L), Seq("0"), Seq(Waves.Bus("v", _ => "x" * 100)), mark = Set(-1, 5))
+      finally java.util.Locale.setDefault(locale)
+    val parsed = parse(one)
+    val number = "-?[0-9]+(\\.[0-9]+)?"
+    assert(parsed.getDocumentElement.getAttribute("width").matches(number), one)
+    assert(parsed.getElementsByTagName("rect").getLength == 1, one) // the frame, no highlight
+    val texts1 = parsed.getElementsByTagName("text")
+    val band   = (0 until texts1.getLength).map(texts1.item(_).getTextContent).filter(_.startsWith("x"))
+    assert(band.size == 1 && band.head.endsWith("…") && band.head.length < 100, band)
+  }
+
   "Co-simulation" should "find a forwarding unit that forwards the older result first" in {
     simulate(new CoreSystem(new ForwardingCore(forwardUnit = new OldestFirst))) { c =>
       val bug = CoSim.compare(c, Asm("li a0, 1\nli a0, 2\nadd a1, a0, a0\necall"))

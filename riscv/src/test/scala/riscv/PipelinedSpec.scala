@@ -1,6 +1,5 @@
 package riscv
 
-import chisel3._
 import chisel3.simulator.scalatest.ChiselSim
 import org.scalatest.flatspec.AnyFlatSpec
 
@@ -9,18 +8,6 @@ import org.scalatest.flatspec.AnyFlatSpec
   */
 class PipelinedSpec extends AnyFlatSpec with ChiselSim {
   val nops = 2
-
-  "PipelineFlush" should "flush the wrong path after a jump, and everything younger after a halt" in {
-    simulate(new PipelineFlush) { c =>
-      for (redirect <- Seq(false, true); halt <- Seq(false, true)) {
-        c.io.redirect.poke(redirect.B)
-        c.io.halt.poke(halt.B)
-        c.io.flushIfId.expect((redirect || halt).B)
-        c.io.flushIdEx.expect((redirect || halt).B)
-        c.io.flushExMem.expect(halt.B)
-      }
-    }
-  }
 
   // one feature each, and every halt cause (the halting instruction comes after padded ones too)
   val programs = Seq(
@@ -84,10 +71,12 @@ class PipelinedSpec extends AnyFlatSpec with ChiselSim {
   }
 
   // Unpadded, with the dependencies spaced by hand: younger instructions with side effects really sit
-  // in the pipeline when a jump redirects it or an instruction halts it
+  // in the pipeline when a jump redirects it or an instruction halts it (a jump behind a halt: both
+  // at once). Together they catch any wrong output of PipelineFlush, as 5.6_pipeline.ipynb does.
   val flushed = Seq(
-    "a store in EX during a halt" -> "auipc t0, 0\nnop\nnop\nebreak\nsw t0, 0(t0)\nsw t0, 4(t0)",
-    "stores on the wrong path"    -> "auipc t0, 0\nnop\nnop\nj 1f\nsw t0, 0(t0)\nsw t0, 4(t0)\n1: ecall"
+    "stores on the wrong path" -> "auipc t0, 0\nnop\nnop\nj 1f\nsw t0, 0(t0)\nsw t0, 4(t0)\n1: ecall",
+    "stores behind a halt"     -> "auipc t0, 0\nnop\nnop\nebreak\nsw t0, 0(t0)\nsw t0, 4(t0)\nsw t0, 8(t0)",
+    "a jump behind a halt"     -> "auipc t0, 0\nnop\nnop\nebreak\nj 1f\nsw t0, 0(t0)\n1: sw t0, 4(t0)"
   )
 
   it should "let no younger instruction take effect after a jump or a halt" in {
